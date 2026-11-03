@@ -40,6 +40,7 @@ const MESSAGES = {
   story_limit:         (d) => `이야기는 한 사람당 ${d?.max}개까지 시작할 수 있어요.`,
   story_not_found:     () => '이야기를 찾을 수 없어요.',
   story_closed:        () => '이미 완결된 이야기예요.',
+  story_not_completed: () => '완결된 이야기만 내보낼 수 있어요.',
   baton_held:          () => '다른 사람이 이어 쓰는 중이에요. 잠시 후 다시 시도해 주세요.',
   person_limit:        (d) => `이 이야기에는 한 사람당 ${d?.max}줄까지 쓸 수 있어요.`,
   invalid_parent:      () => '이야기가 바뀌었어요. 새로고침해 주세요.',

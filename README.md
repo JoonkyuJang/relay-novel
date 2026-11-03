@@ -29,6 +29,7 @@ Static frontend on GitHub Pages + a Supabase (Postgres) backend.
 
 ```
 index.html, story.html, admin.html   pages (UI language: Korean / admin: English)
+export.html                         export completed stories: ?id=<story> or all (print to PDF / .txt)
 js/api.js                           the ONLY file that talks to the backend
 js/config.js                        project URL + publishable key (safe to publish)
 js/ui.js, js/*.js                   page logic
@@ -62,7 +63,7 @@ Never edit an applied migration. Add a new file
 
 ```
 cd tests/local && npm install
-npm test        # resets a local DB, applies migrations, runs run.mjs (20 checks incl. races)
-npm run e2e     # browser flows with Playwright against the same local DB
+npm test        # resets a local DB, applies migrations, runs run.mjs (22 checks incl. races)
+npm run e2e     # browser flows with Playwright against the same local DB (13 checks)
 ```
 `reset.sh` expects a local server on socket `/var/lib/postgresql/rn`, port 5433.

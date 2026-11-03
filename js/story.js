@@ -89,7 +89,8 @@ function renderComposer() {
   if (mode === 'done') {
     c.replaceChildren(h('div', { class: 'box ok' },
       lastResult?.result === 'accepted' && lastResult.story_status === 'completed'
-        ? '마지막 줄을 썼어요. 이야기가 완결되었습니다! 🎉' : '완결된 이야기입니다.'));
+        ? '마지막 줄을 썼어요. 이야기가 완결되었습니다! 🎉' : '완결된 이야기입니다.',
+      ' ', h('a', { href: `export.html?id=${storyId}` }, '이 이야기 내보내기 (PDF / 텍스트)')));
     return;
   }
 

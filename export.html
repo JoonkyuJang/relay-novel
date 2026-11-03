@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>릴레이 소설 모음</title>
+  <link rel="stylesheet" href="css/base.css">
+  <style>
+    /* Stage 1-style plain layout; print rules make "Save as PDF" usable now. */
+    .cover { text-align: center; padding: 15vh 0 10vh; }
+    .cover h1 { font-size: 2rem; }
+    .toc ol { padding-left: 1.5em; }
+    article.story { margin: 2.5rem 0; }
+    article.story h2 { font-size: 1.4rem; margin-bottom: .2rem; }
+    .line { margin: .6rem 0; }
+    .credit { color: var(--muted); font-size: .8em; white-space: nowrap; }
+    @media print {
+      @page { size: A4; margin: 20mm 18mm; }
+      :root { --fg: #000; --muted: #555; --bg: #fff; }
+      body { max-width: none; padding: 0; font-size: 11pt; }
+      .no-print { display: none !important; }
+      .cover { break-after: page; }
+      .toc { break-after: page; }
+      .toc a { text-decoration: none; }
+      article.story + article.story { break-before: page; }
+      article.story { margin: 0; }
+      .line { break-inside: avoid; }
+    }
+  </style>
+  <script src="js/vendor/supabase-js-2.117.3.umd.js"></script>
+  <script type="module" src="js/export.js"></script>
+</head>
+<body>
+  <div class="no-print row" style="margin-bottom:1rem">
+    <a id="back" href="./">← 목록</a>
+    <button id="print" disabled>PDF로 저장 / 인쇄</button>
+    <button id="txt" disabled>텍스트로 저장 (.txt)</button>
+    <span class="muted">PDF: 인쇄 창에서 "PDF로 저장"을 고르세요.</span>
+  </div>
+  <div id="notice"></div>
+  <main id="book"><p class="muted">불러오는 중…</p></main>
+</body>
+</html>

@@ -294,5 +294,48 @@ await test('admin stats, log, export, realtime signals', async () => {
   assert.ok(sig.some(x => x.key === 'list' && Number(x.version) > 50));
 });
 
+await test('export: completed only, ordered by completion, hidden lines omitted', async () => {
+  const open = (await rpc('create_story', { p_title: '진행 중', p_text: '아직', ...who(1000) })).story_id;
+  await expectErr(rpc('export_stories', { p_story_id: open }), 'story_not_completed');
+  await expectErr(rpc('export_stories', { p_story_id: '00000000-0000-0000-0000-000000000000' }), 'story_not_found');
+
+  const all = await rpc('export_stories');
+  assert.ok(all.stories.length >= 2);
+  assert.ok(all.stories.every(s => s.lines.length > 0));
+  const times = all.stories.map(s => s.completed_at);
+  assert.deepEqual(times, [...times].sort(), 'ordered by completed_at');
+  assert.ok(!all.stories.some(s => s.id === open), 'open stories excluded');
+  assert.equal(all.credits, 'name_sid');
+  assert.ok(all.stories[0].lines[0].author_name && all.stories[0].lines[0].student_id);
+
+  // a hidden line is omitted from export
+  const full = await admin('admin_get_story', { p_story_id: RACE });
+  const victim = full.lines.find(l => l.kind === 'canonical' && l.position === 5);
+  await admin('admin_set_line_deleted', { p_line_id: victim.id, p_deleted: true });
+  const one = await rpc('export_stories', { p_story_id: RACE });
+  assert.equal(one.stories.length, 1);
+  assert.ok(!one.stories[0].lines.some(l => l.position === 5));
+  assert.equal(one.stories[0].lines.length, 19);
+  await admin('admin_set_line_deleted', { p_line_id: victim.id, p_deleted: false });
+
+  // deleted stories excluded
+  await admin('admin_set_story_deleted', { p_story_id: RACE, p_deleted: true });
+  assert.ok(!(await rpc('export_stories')).stories.some(s => s.id === RACE));
+  await expectErr(rpc('export_stories', { p_story_id: RACE }), 'story_not_found');
+  await admin('admin_set_story_deleted', { p_story_id: RACE, p_deleted: false });
+});
+
+await test('export credits toggle: name_sid / name / none (server-side)', async () => {
+  await admin('admin_update_settings', { p: { export_credits: 'name' } });
+  let e = await rpc('export_stories', { p_story_id: RACE });
+  assert.ok(e.stories[0].lines.every(l => l.author_name && l.student_id === null));
+  await admin('admin_update_settings', { p: { export_credits: 'none' } });
+  e = await rpc('export_stories', { p_story_id: RACE });
+  assert.ok(e.stories[0].lines.every(l => l.author_name === null && l.student_id === null));
+  await assert.rejects(admin('admin_update_settings', { p: { export_credits: 'bogus' } }), /check constraint/);
+  await admin('admin_update_settings', { p: { export_credits: 'name_sid' } });
+  assert.equal((await admin('admin_get_settings')).export_credits, 'name_sid');
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);
 await pool.end();

@@ -250,5 +250,90 @@ await step('remote self-test page passes against local DB (as admin, cleans up)'
   assert.match(out, /test story deleted/);
 });
 
+// Build a completed story directly in the DB (same functions, superuser).
+async function makeCompleted(title, texts, sidBase) {
+  const q = (sql, a) => pool.query(sql, a).then(r => r.rows[0].r);
+  const { story_id } = await q(`select public.create_story($1, $2, $3, $4, 'seed') as r`, [title, texts[0], '작가A', `${sidBase}0`]);
+  await pool.query(`update app.stories set max_lines = $2 where id = $1`, [story_id, texts.length]);
+  for (let i = 1; i < texts.length; i++) {
+    const head = (await pool.query(`select head_line_id from app.stories where id = $1`, [story_id])).rows[0].head_line_id;
+    await q(`select public.submit_line($1, $2, $3, $4, $5, 'seed', null) as r`, [story_id, head, texts[i], `작가${'BCDEFG'[i - 1]}`, `${sidBase}${i}`]);
+  }
+  return story_id;
+}
+
+await step('export: single completed story (link, credits, txt download, PDF)', async () => {
+  const first = await makeCompleted('먼저 끝난 이야기', ['첫 줄입니다.', '둘째 줄입니다.', '마지막 줄입니다.'], '20269900');
+  await makeCompleted('나중에 끝난 이야기', ['하나.', '둘.'], '20269800');
+  const p = await newUser('reader', '0');
+  await p.goto(`${BASE}/story.html?id=${first}`);
+  await p.click('text=이 이야기 내보내기');
+  await p.waitForURL(/export\.html\?id=/);
+  await p.waitForSelector('article.story');
+  const text = await p.textContent('#book');
+  assert.match(text, /먼저 끝난 이야기/);
+  assert.match(text, /둘째 줄입니다\. — 작가B \(202699001\)/);
+  assert.ok(!/차례/.test(text), 'no TOC for single story');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#txt')]);
+  const txt = fs.readFileSync(await dl.path(), 'utf8');
+  assert.match(dl.suggestedFilename(), /^먼저_끝난_이야기-\d{8}\.txt$/);
+  assert.match(txt, /^﻿?=+\n먼저 끝난 이야기\n/);
+  assert.match(txt, /마지막 줄입니다\.  — 작가C \(202699002\)/);
+  await p.emulateMedia({ media: 'print' });
+  await p.pdf({ path: `${SHOTS}/export-single.pdf`, format: 'A4' });
+});
+
+await step('export: all completed stories ordered by completion date, open ones excluded', async () => {
+  const p = await newUser('reader2', '0');
+  await p.goto(`${BASE}/`);
+  await p.click('text=완결된 이야기 모두 내보내기');
+  await p.waitForURL(/export\.html$/);
+  await p.waitForSelector('nav.toc li');
+  const toc = await p.locator('nav.toc li a').allTextContents();
+  const exp = (await pool.query(`select coalesce(title, '제목 없는 이야기') t from app.stories
+     where status = 'completed' and deleted_at is null order by completed_at, created_at`)).rows.map(r => r.t);
+  assert.deepEqual(toc, exp);
+  assert.ok(toc.indexOf('먼저 끝난 이야기') < toc.indexOf('나중에 끝난 이야기'));
+  assert.ok(!toc.includes('E2E 이야기'), 'rewound (open) story excluded');
+  assert.equal(await p.locator('article.story').count(), exp.length);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#txt')]);
+  assert.match(dl.suggestedFilename(), /^relay-novel-\d{8}\.txt$/);
+  await p.screenshot({ path: `${SHOTS}/export-all.png`, fullPage: true });
+  await p.emulateMedia({ media: 'print' });
+  await p.pdf({ path: `${SHOTS}/export-all.pdf`, format: 'A4' });
+});
+
+await step('export: open story shows a clear message', async () => {
+  const id = (await pool.query(`select id from app.stories where status = 'open' limit 1`)).rows[0].id;
+  const p = await newUser('reader3', '0');
+  await p.goto(`${BASE}/export.html?id=${id}`);
+  await p.waitForSelector('#notice .box');
+  assert.match(await p.textContent('#notice'), /완결된 이야기만/);
+});
+
+await step('admin credits toggle (select) changes export credits', async () => {
+  const p = await newUser('admin3', '0');
+  await p.goto(`${BASE}/admin.html`);
+  await p.fill('input[name=email]', 'admin@test');
+  await p.fill('input[name=password]', 'pw');
+  await p.click('#login button');
+  await p.click('nav button[data-tab=settings]');
+  await p.selectOption('select[name=export_credits]', 'name');
+  await p.click('#view button[type=submit]');
+  await p.waitForSelector('text=Settings saved.');
+  const r = await newUser('reader4', '0');
+  await r.goto(`${BASE}/export.html`);
+  await r.waitForSelector('article.story');
+  const t = await r.textContent('#book');
+  assert.match(t, /— 작가B/);
+  assert.ok(!/\(20269900\d\)/.test(t), 'no student ids');
+  await p.selectOption('select[name=export_credits]', 'none');
+  await p.click('#view button[type=submit]');
+  await p.waitForSelector('text=Settings saved.');
+  await r.reload(); await r.waitForSelector('article.story');
+  assert.ok(!(await r.textContent('#book')).includes('—'), 'no credits at all');
+  await pool.query(`update app.settings set export_credits = 'name_sid'`);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);
 await browser.close(); server.close(); await pool.end();

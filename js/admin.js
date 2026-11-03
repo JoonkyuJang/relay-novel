@@ -164,22 +164,25 @@ const SETTINGS = [
   ['show_student_id', 'Show student IDs in writer reveal', 'checkbox'],
   ['stats_public', 'Contributor stats public', 'checkbox'],
   ['likes_enabled', 'Likes enabled (stage 2)', 'checkbox'],
+  ['export_credits', 'Credits in exports', 'select',
+    [['name_sid', 'Name + student ID'], ['name', 'Name only'], ['none', 'No credits']]],
 ];
 
 async function viewSettings() {
   const st = await A.getSettings();
   const form = h('form', { class: 'box' },
-    SETTINGS.map(([k, label, type]) => h('label', {},
-      type === 'checkbox'
-        ? [h('input', { type, name: k, checked: st[k] }), ' ', label]
-        : [label, h('input', { type, name: k, value: st[k], min: 0 })])),
+    SETTINGS.map(([k, label, type, options]) => h('label', {},
+      type === 'checkbox' ? [h('input', { type, name: k, checked: st[k] }), ' ', label]
+      : type === 'select' ? [label, ' ', h('select', { name: k },
+          options.map(([v, t]) => h('option', { value: v, selected: st[k] === v }, t)))]
+      : [label, h('input', { type, name: k, value: st[k], min: 0 })])),
     h('p', { class: 'muted' }, 'Lowering N completes any open story that is already at or over the new limit. Raising N does not reopen completed stories (reopen them one by one).'),
     h('button', { type: 'submit' }, 'Save'));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const patch = {};
     for (const [k, , type] of SETTINGS) {
-      const v = type === 'checkbox' ? form[k].checked : Number(form[k].value);
+      const v = type === 'checkbox' ? form[k].checked : type === 'select' ? form[k].value : Number(form[k].value);
       if (v !== st[k]) patch[k] = v;
     }
     if (!Object.keys(patch).length) return notice('Nothing changed.', 'ok');

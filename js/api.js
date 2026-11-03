@@ -80,6 +80,12 @@ export const listStories = () => call('list_stories');
 export const getStory = (storyId) => call('get_story', { p_story_id: storyId });
 export const publicStats = () => call('public_stats');
 
+// Completed stories for export: one (storyId) or all, ordered by completion.
+// -> { exported_at, credits: 'name_sid'|'name'|'none', stories: [{ id, title, created_at, completed_at,
+//      lines: [{ position, text, author_name, student_id }] }] }
+export const exportStories = (storyId = null) =>
+  call('export_stories', storyId ? { p_story_id: storyId } : {});
+
 export function createStory({ title, text, name, studentId }) {
   return call('create_story', {
     p_title: title ?? null, p_text: text, p_name: name, p_student_id: studentId,
