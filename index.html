@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>릴레이 소설</title>
+  <link rel="stylesheet" href="css/base.css">
+  <script src="js/vendor/supabase-js-2.117.3.umd.js"></script>
+  <script type="module" src="js/index.js"></script>
+</head>
+<body>
+  <h1>릴레이 소설</h1>
+  <div id="notice"></div>
+
+  <h2>진행 중인 이야기</h2>
+  <ul class="stories" id="ongoing"><li class="muted">불러오는 중…</li></ul>
+
+  <h2>새 이야기 시작하기</h2>
+  <form id="create" class="box">
+    <label>제목 (선택) <input type="text" name="title"></label>
+    <label>첫 줄 <span class="counter muted" id="counter"></span>
+      <textarea name="text" rows="2" required></textarea></label>
+    <div class="row">
+      <label>이름 <input type="text" name="name" maxlength="20" required></label>
+      <label>학번 <input type="text" name="sid" maxlength="20" inputmode="numeric" required></label>
+    </div>
+    <div class="row"><button type="submit">시작하기</button><span id="createMsg"></span></div>
+  </form>
+
+  <h2>완결된 이야기</h2>
+  <ul class="stories" id="completed"><li class="muted">불러오는 중…</li></ul>
+
+  <p class="muted"><a href="admin.html">admin</a></p>
+</body>
+</html>

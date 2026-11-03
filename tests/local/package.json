@@ -1,0 +1,7 @@
+{
+  "name": "relay-novel-local-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "./reset.sh && node run.mjs", "e2e": "./reset.sh && node e2e.mjs" },
+  "dependencies": { "pg": "^8" }
+}

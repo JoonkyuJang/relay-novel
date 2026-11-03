@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Concurrency Self-Test</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="../../css/base.css">
+  <script src="../../js/vendor/supabase-js-2.117.3.umd.js"></script>
+</head>
+<body>
+  <p><a href="../../admin.html">← admin</a></p>
+  <h1>Concurrency self-test</h1>
+  <p class="muted">Creates a "[TEST]" story on the live database and fires many simultaneous
+    submissions at it. If you are logged in on admin.html in this browser, the test story is
+    deleted afterwards. Run it while submissions are open, and not during the event.</p>
+  <div class="row">
+    <label>Writers per round <input type="number" id="writers" value="25" min="2" max="60"></label>
+    <label>Rounds <input type="number" id="rounds" value="3" min="1" max="10"></label>
+  </div>
+  <p><button id="run">Run test</button></p>
+  <pre id="out" class="box" style="white-space:pre-wrap"></pre>
+  <script type="module">
+    import { SUPABASE_URL, SUPABASE_KEY } from '../../js/config.js';
+    import { runConcurrencyTest } from './concurrency-lib.mjs';
+    const out = document.getElementById('out');
+    const log = (...a) => { out.textContent += a.join(' ') + '\n'; };
+    document.getElementById('run').addEventListener('click', async (e) => {
+      e.target.disabled = true; out.textContent = '';
+      try {
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const { data } = await sb.auth.getSession();
+        const token = data.session?.access_token ?? null;
+        log(token ? `admin session found (${data.session.user.email})` : 'no admin session');
+        await runConcurrencyTest({
+          writers: Number(document.getElementById('writers').value),
+          rounds: Number(document.getElementById('rounds').value), log, accessToken: token });
+      } catch (err) { log('ERROR', err.message); }
+      e.target.disabled = false;
+    });
+  </script>
+</body>
+</html>
