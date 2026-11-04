@@ -75,7 +75,7 @@ A wrong password shows the same message as any other login problem. The 관리 m
 ## 부가 기능 (extras)
 
 Every extra has a switch in **관리자 콘솔 → 부가 기능** (inner tabs 바탕화면 · 낮과 밤 · 화면 보호기 ·
-고양이 · 도장 · 완결 이야기 · 소리 · 숨은 재미). Changes save immediately and reach open screens live.
+고양이 · 도장 · 완결 이야기 · 소리 · 숨은 재미). Changes save immediately and reach open screens live. (새 이야기 제목 필수 is also stored in extras but sits in the 설정 tab.)
 
 - Storage: `app.settings.extras` (jsonb) merged over `app.extras_defaults()`;
   `admin_update_settings` accepts only known keys with the same JSON type. The front-end copy of the
@@ -83,7 +83,7 @@ Every extra has a switch in **관리자 콘솔 → 부가 기능** (inner tabs �
 - `js/extras/`: `extras.js` (settings, event bus, Seoul time), `stamps.js` + `stamp-art.js` (도장; outlines
   generated from BM JUA), `cat.js` + `cat-sprites.js` (문냥이), `saver.js` (화면 보호기 3·6·10분),
   `daynight.js` (sky by Seoul time, real moon phase), `desk.js` (메모장, 휴지통, 마감 시계, 우클릭 메뉴,
-  오늘의 첫 문장, 이 컴퓨터에 관하여), `record.js` (이야기 기록), `sound.js` (WebAudio, off by default per device),
+  오늘의 첫 문장, 이 컴퓨터에 관하여), `record.js` (이야기 기록), `sound.js` + `synth.js` (all sounds synthesized with WebAudio in one retro chip palette — pulse, triangle, LFSR noise, 60 Hz steps — no files; off by default per device; the 낭독회 voice follows Korean phrase intonation),
   `fun.js` (숨은 재미 — deliberately not in 도움말).
 - Database: `stamps`, `counters` (cat pets, unused batons) and RPCs `toggle_stamp`, `get_story_stamps`,
   `pet_cat`, `story_cards`, `get_about`, `admin_line_stamps` (migration `20261106000000_extras.sql`).

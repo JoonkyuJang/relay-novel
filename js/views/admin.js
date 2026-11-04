@@ -28,6 +28,7 @@ const SETTINGS = [
   ['submissions_open', '글쓰기 열림', 'checkbox'],
   ['allow_consecutive_lines', '같은 사람이 연달아 쓰기 허용', 'checkbox'],
   ['allow_new_stories', '새 이야기 허용', 'checkbox'],
+  ['x:title_required', '새 이야기 제목 필수', 'checkbox'],
   ['guestbook_open', '방명록 열림', 'checkbox'],
   ['show_student_id', '속성 창에 학번 표시', 'checkbox'],
   ['stats_public', '출석부 공개', 'checkbox'],
@@ -201,9 +202,11 @@ export function adminView(app) {
 
   async function viewSettings() {
     const st = await A.getSettings();
+    const x = { ...DEFAULTS, ...(st.extras ?? {}) };                // 'x:key' rows live in settings.extras
+    const val = (k) => k.startsWith('x:') ? x[k.slice(2)] : st[k];
     const form = h('form', { novalidate: true, style: 'display:flex;flex-direction:column;gap:14px' },
       h('div', { class: 'settings-grid' }, SETTINGS.map(([k, label, type]) => type === 'checkbox'
-        ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: k, checked: st[k] }), label)
+        ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: k, checked: !!val(k) }), label)
         : h('label', {}, h('span', {}, label), h('input', { type: 'number', class: 'field sm', name: k, value: st[k], min: 0 })))),
       h('p', { class: 'muted', style: 'margin:0;line-height:18px' },
         'N을 줄이면 이미 그 길이에 도달한 진행 중 이야기는 바로 완결돼요. N을 늘려도 완결된 이야기가 다시 열리지는 않아요 (이야기 창에서 하나씩 다시 열 수 있어요).'),
@@ -215,7 +218,8 @@ export function adminView(app) {
       const patch = {};
       for (const [k, , type] of SETTINGS) {
         const v = type === 'checkbox' ? form[k].checked : Number(form[k].value);
-        if (v !== st[k]) patch[k] = v;
+        if (v === val(k)) continue;
+        if (k.startsWith('x:')) (patch.extras ??= {})[k.slice(2)] = v; else patch[k] = v;
       }
       if (!Object.keys(patch).length) return notice('바뀐 게 없어요.', 'ok');
       act(() => A.updateSettings(patch), '설정을 저장했어요.');

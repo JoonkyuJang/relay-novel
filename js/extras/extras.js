@@ -24,6 +24,7 @@ export const DEFAULTS = {
   sound: true, sound_default: false,
   fun: true, fun_full: true, fun_amber: true, fun_meow: true, fun_trash: true,
   fun_clock: true, fun_tidy: true, fun_seosi: true, fun_eagle: true, fun_catreads: true,
+  title_required: true,
 };
 
 let current = { ...DEFAULTS };

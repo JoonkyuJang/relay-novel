@@ -279,9 +279,9 @@ export function storyView(app, storyId) {
       api.setDraft(storyId, ta.value);
       typing?.send(n);
     };
-    ta.addEventListener('input', () => {
+    ta.addEventListener('input', (e) => {
       update();
-      if (Date.now() - lastKey > 40) { lastKey = Date.now(); play('key'); }
+      if (Date.now() - lastKey > 40) { lastKey = Date.now(); play('key', { ch: e.inputType?.startsWith('delete') ? '\b' : e.data?.slice(-1) }); }
     });
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); submit(); }

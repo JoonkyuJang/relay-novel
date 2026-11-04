@@ -150,6 +150,7 @@ const MESSAGES = {
   invalid_student_id:  () => '학번을 확인해 주세요. (숫자/영문, 20자 이내)',
   empty_text:          () => '내용을 입력해 주세요.',
   too_long:            (d) => `최대 ${d?.max}자까지 쓸 수 있어요.`,
+  title_required:      () => '제목을 붙여 주세요.',
   title_too_long:      (d) => `제목은 최대 ${d?.max}자까지 쓸 수 있어요.`,
   story_limit:         (d) => `이야기는 한 사람당 ${d?.max}개까지 시작할 수 있어요.`,
   story_not_found:     () => '이야기를 찾을 수 없어요.',

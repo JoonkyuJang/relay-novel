@@ -121,7 +121,7 @@ export function initSaver(app, wm, cat) {
           return;
         }
         text.textContent += chars[i++];
-        if (on('saver_typewriter') && soundOn() && chars[i - 1] !== ' ') play('key');
+        if (on('saver_typewriter') && soundOn()) play('key', { ch: chars[i - 1] });
       }, reduceMotion() ? 20 : 95);
       loops.push(t);
     };

@@ -3,7 +3,7 @@
 import * as api from '../api.js';
 import { h, errorText } from '../ui.js';
 import { on, reduceMotion } from '../extras/extras.js';
-import { blip, voiceBase, play } from '../extras/sound.js';
+import { voice as lineVoice, play } from '../extras/sound.js';
 import { seal } from '../extras/stamps.js';
 
 export function readingView(app, storyId) {
@@ -53,14 +53,14 @@ export function readingView(app, storyId) {
     if (!type || reduceMotion()) { cur.textContent = l.text; return afterLine(); }
     cur.textContent = '';
     const chars = [...l.text];
-    const base = voiceBase(l.student_id || l.author_name || String(l.position));
+    const v = lineVoice(l.text, l.student_id || l.author_name || String(l.position));
     let k = 0;
     bars.classList.add('on');
     const step = () => {
       if (k >= chars.length) { bars.classList.remove('on'); return afterLine(); }
       const ch = chars[k++];
       cur.textContent += ch;
-      if (voice) blip(ch, base, { force: true });
+      if (voice) v.say(k - 1, { force: true, rate: speed });
       const pause = /[,，、]/.test(ch) ? 260 : /[.!?。…]/.test(ch) ? 520 : 0;
       timer = setTimeout(step, (85 + pause) / speed);
     };

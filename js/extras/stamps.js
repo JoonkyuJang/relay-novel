@@ -78,8 +78,8 @@ export function stampButtons(app, line, state, { onChange } = {}) {
       state.counts = r.counts;
       state.mine = r.stamped ? [...state.mine, kind] : state.mine.filter(k => k !== kind);
       draw();
+      play(r.stamped ? 'stamp' : 'unstamp');
       if (r.stamped) {
-        play('stamp');
         row.querySelector(`.stamp-btn:nth-child(${KINDS.indexOf(kind) + 1}) svg`)?.classList.add('thunk');
       }
       msg.textContent = '';

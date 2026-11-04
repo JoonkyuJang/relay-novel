@@ -729,6 +729,14 @@ await step('관리 · 부가 기능: inner tabs save switches and the deadline',
   await w.locator('text=마감 일시 (서울) 저장했어요').waitFor();
   const x = (await pool.query(`select extras from app.settings`)).rows[0].extras;
   assert.equal(x.cat_name, '백냥이'); assert.equal(x.deadline, '2026-11-30T00:00:00+09:00');
+  // 설정: 새 이야기 제목 필수 lives in extras but sits next to 새 이야기 허용
+  await w.locator('.tabs >> text=설정').click();
+  const req = w.locator('label.check:has-text("새 이야기 제목 필수") input');
+  assert.ok(await req.isChecked());
+  await req.uncheck();
+  await w.locator('button:has-text("저장")').click();
+  await w.locator('text=설정을 저장했어요').waitFor();
+  assert.equal((await pool.query(`select extras->>'title_required' v from app.settings`)).rows[0].v, 'false');
   await pool.query(`update app.settings set extras = '{}'`);
 });
 
@@ -751,6 +759,33 @@ await step('mobile: stamp sheet buttons, cat on the dock, D-n deadline', async (
   assert.match(await p.locator('.menubar .deadline').textContent(), /^D-\d+$/);
   await p.locator('.cat').waitFor();
   await p.screenshot({ path: `${SHOTS}/33-mobile-story.png` });
+});
+
+await step('logo opens 이 컴퓨터에 관하여; a new story needs a title; sounds play without errors', async () => {
+  const p = await newUser('제목없음', '2026100807');
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').waitFor();
+  await p.click('.menubar .logo');
+  await win(p, 'about').locator('text=연문회 OS').first().waitFor();
+  await p.goto(`${BASE}/#/new`);
+  await p.waitForSelector('#ns-text');
+  assert.equal((await p.textContent('label[for="ns-title"]')).trim(), '제목');
+  await p.fill('#ns-title', '');
+  await p.fill('#ns-text', '제목 없이 시작해 볼까요.');
+  await p.click('text=시작하기');
+  await win(p, 'new').locator('text=제목을 붙여 주세요.').waitFor();
+  await win(p, 'new').locator('text=닫기').click();
+  // every sound and the reading voice render in the page without throwing
+  const r = await p.evaluate(async () => {
+    const { makeSynth, speakerFor, voicePlan } = await import('./js/extras/synth.js');
+    const ac = new OfflineAudioContext(1, 44100 * 3, 44100), s = makeSynth(ac);
+    s.names.forEach((n, i) => s.play(n, 0.01 + i * 0.05, { ch: 'a' }));
+    const sp = speakerFor('x'); voicePlan('안녕하세요? 반가워요!', sp).forEach((n, i) => s.speak(0.02 + i * 0.08, n, sp, 1));
+    const d = (await ac.startRendering()).getChannelData(0);
+    let peak = 0; for (const x of d) peak = Math.max(peak, Math.abs(x));
+    return { peak, names: s.names.length };
+  });
+  assert.ok(r.peak > 0.05 && r.peak < 1, `sound level ${r.peak}`);
 });
 
 await step('mobile tour: drawer cards, finished story, 낭독회, help, about, memo, sky, amber, saver', async () => {

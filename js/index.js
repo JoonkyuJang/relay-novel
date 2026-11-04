@@ -183,7 +183,9 @@ let logoEl = null;
 function renderMenubar() {
   const ident = api.getIdentity();
   document.body.classList.toggle('not-entered', !api.hasEntered());
-  logoEl = h('a', { class: 'logo', href: '#/stories', 'aria-label': '연문회 OS — 이야기 서랍' }, icon('logo', 16), h('span', {}, '연문회 OS'));
+  const about = on('about');                  // the logo is the "apple menu": 이 컴퓨터에 관하여…
+  logoEl = h('a', { class: 'logo', href: about ? '#/about' : '#/stories', 'aria-label': about ? '연문회 OS — 이 컴퓨터에 관하여' : '연문회 OS — 이야기 서랍' },
+    icon('logo', 16), h('span', {}, '연문회 OS'));
   presenceEl.hidden = !on('presence') || presenceCount == null;
   menubar.replaceChildren(...[
     logoEl,

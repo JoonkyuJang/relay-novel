@@ -70,6 +70,14 @@ await test('admin functions: anon denied, non-admin user rejected', async () => 
   assert.equal(await admin('is_admin'), true);
 });
 
+await test('title required by default; the admin can turn it off', async () => {
+  assert.equal((await rpc('get_public_settings')).extras.title_required, true);
+  await expectErr(rpc('create_story', { p_title: null, p_text: 'ok', ...who(1) }), 'title_required');
+  await expectErr(rpc('create_story', { p_title: '  ', p_text: 'ok', ...who(1) }), 'title_required');
+  const r = await admin('admin_update_settings', { p: { extras: { title_required: false } } });
+  assert.equal(r.extras.title_required, false);      // the rest of the suite makes untitled stories
+});
+
 let S1;
 await test('create_story + validation', async () => {
   await expectErr(rpc('create_story', { p_title: null, p_text: '   ', ...who(1) }), 'empty_text');

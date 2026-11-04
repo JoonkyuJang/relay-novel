@@ -5,7 +5,7 @@ import { h } from '../ui.js';
 import { isPhone } from '../wm.js';
 import { SPRITES } from './cat-sprites.js';
 import { on, X, bus, reduceMotion } from './extras.js';
-import { play, blip, voiceBase, soundOn } from './sound.js';
+import { play, voice, soundOn } from './sound.js';
 import { currentPhase } from './daynight.js';
 
 export const PALETTES = {
@@ -178,13 +178,14 @@ export function initCat(app, wm, desktop) {
     state = 'pet';
     setFrame('happy');
     if (!reduceMotion()) { el.classList.remove('squish'); void el.offsetWidth; el.classList.add('squish'); }
-    play('meow');
+    play(wasNap ? 'purr' : 'meow');
     float('♥');
     let n = null;
     try { n = Number(await api.petCat()); } catch { /* still a happy cat */ }
     const counted = n && on('cat_pet_count');
     if (n && on('cat_wink') && n % 100 === 0) {
       setFrame('wink');
+      play('chime');
       say(['야옹~', h('br'), h('small', {}, `(${n.toLocaleString('ko-KR')}번째!)`)], 3200, 'rare');
       float('✦', 'spark'); later(() => float('✦', 'spark'), 300); later(() => float('♥'), 600);
     } else {
@@ -204,7 +205,7 @@ export function initCat(app, wm, desktop) {
       clearTimers(); state = 'busy';
       setFrame('jump');
       el.classList.remove('jumping'); void el.offsetWidth; el.classList.add('jumping');
-      play('pop');
+      play('mrrp');
       later(() => { el.classList.remove('jumping'); state === 'busy' && (napWin ? (state = 'nap', setFrame('sleep'), anim = setInterval(watchNap, 500)) : sit()); }, 1100);
     },
     hiss() {
@@ -230,11 +231,11 @@ export function initCat(app, wm, desktop) {
       const shown = h('span', {});
       say([shown], 99999, 'reading');
       let i = 0;
-      const base = voiceBase('cat') * 1.4;
+      const v = voice(text, 'cat', { pitch: 1.9 });
       const t = setInterval(() => {
         if (i >= chars.length) { clearInterval(t); setTimeout(() => { bubble.hidden = true; }, 2500); return; }
         shown.textContent += chars[i];
-        blip(chars[i], base);
+        v.say(i);
         i++;
       }, soundOn() ? 85 : 55);
     },
@@ -268,7 +269,7 @@ export function initCat(app, wm, desktop) {
   }, { passive: true });
 
   el.addEventListener('click', (e) => { e.stopPropagation(); pet(); });
-  el.addEventListener('yawn', () => { if (!el.hidden) say('하암~', 1800); });
+  el.addEventListener('yawn', () => { if (!el.hidden) { say('하암~', 1800); play('yawn'); } });
 
   // place on the floor (desktop) or on the dock (phone)
   function home() {
