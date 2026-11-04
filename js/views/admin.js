@@ -137,7 +137,7 @@ export function adminView(app) {
 
   const TABS = [
     ['conflicts', '충돌'], ['stories', '이야기'], ['settings', '설정'],
-    ['guestbook', '방명록'], ['people', '참여자'], ['log', '기록'], ['extras', '부가 기능'],
+    ['guestbook', '방명록'], ['people', '참여자'], ['log', '기록'], ['extras', '부가 기능'], ['reset', '초기화'],
   ];
   let extraTab = EXTRA_TABS[0][0];
   function renderTabs() {
@@ -315,7 +315,45 @@ export function adminView(app) {
       h('p', { class: 'muted', style: 'margin:0' }, '바꾸면 바로 저장되고, 열려 있는 모든 화면에 곧 반영돼요.')];
   }
 
-  const VIEWS = { extras: viewExtras, conflicts: viewConflicts, stories: viewStories, settings: viewSettings, guestbook: viewGuestbook, people: viewPeople, log: viewLog };
+  // 초기화: wipe practice data before the program starts. Settings and switches stay as they are.
+  async function viewReset() {
+    const c = await A.resetCounts();
+    const ITEMS = [
+      ['test_stories', '테스트 이야기만 지우기', `제목이 "[TEST]"로 시작하는 이야기 ${c.test_stories}편 (동시성 테스트가 남긴 것)`, c.test_stories, false],
+      ['cat_pets', '고양이 쓰다듬기 횟수 0으로', `지금 ${c.cat_pets}번`, c.cat_pets, false],
+      ['trash', '휴지통 0으로', `안 쓰고 놓은 바통 ${c.trash}번`, c.trash, false],
+      ['client_errors', '브라우저 오류 기록 비우기', `${c.client_errors}개`, c.client_errors, false],
+      ['stamps', '도장 모두 지우기', `${c.stamps}개`, c.stamps, true],
+      ['guestbook', '방명록 비우기', `${c.guestbook}개 · 번호도 #001부터 다시`, c.guestbook, true],
+      ['stories', '이야기 모두 지우기', `이야기 ${c.stories}편 · 줄 ${c.lines}개 (충돌 ${c.conflicts}개 포함) · 그 도장까지 · 출석부도 비어요`, c.stories, true],
+      ['log', '관리 기록 비우기', `${c.log}줄 (초기화했다는 기록 한 줄은 남아요)`, c.log, false],
+    ];
+    const run = async (what, label, danger) => {
+      if (danger) {
+        const typed = await osPrompt(`${label}: 되돌릴 수 없어요. 지우기 전에 백업 파일을 자동으로 내려받아요.\n계속하려면 '지우기'라고 적어 주세요.`, '',
+          { title: '초기화', ok: '지우기', danger: true });
+        if (typed == null) return;
+        if (typed.trim() !== '지우기') { notice("'지우기'라고 적어야 지워져요."); return; }
+        await backup();
+      } else if (!(await osConfirm(`${label}?`, { title: '초기화', ok: '확인' }))) return;
+      act(() => A.reset(what), `${label} — 끝났어요.`);
+    };
+    const all = ITEMS.map(i => i[0]).filter(k => k !== 'test_stories');
+    return [
+      h('p', { style: 'margin:0 0 12px;line-height:20px' },
+        '프로그램을 시작하기 전에 연습한 흔적을 지워요. 설정 · 부가 기능 스위치 · 관리자 계정은 그대로예요. ',
+        h('b', {}, '지우는 건 되돌릴 수 없어요'), ' — 도장 · 방명록 · 이야기를 지울 땐 백업 파일을 먼저 자동으로 내려받아요. 각자 기기의 메모장 · 소리 설정은 그 기기에만 있어서 여기서 지워지지 않아요.'),
+      h('div', { class: 'reset-list' }, ITEMS.map(([k, label, hint, n, danger]) => h('div', { class: 'reset-row' },
+        h('span', { class: 'extra-label' }, h('span', {}, label), h('span', { class: 'faint' }, hint)),
+        h('button', { type: 'button', class: `btn btn-sm${danger ? ' danger' : ''}`, disabled: !Number(n), onclick: () => run([k], label, danger) },
+          Number(n) ? (danger ? '지우기' : '초기화') : '비어 있음')))),
+      h('div', { class: 'reset-all' },
+        h('span', { class: 'extra-label' }, h('b', {}, '전부 초기화'), h('span', { class: 'faint' }, '위의 모든 것을 한 번에 — 프로그램 시작 직전에')),
+        h('button', { type: 'button', class: 'btn btn-primary danger', onclick: () => run(all, '전부 초기화', true) }, '전부 초기화')),
+    ];
+  }
+
+  const VIEWS = { reset: viewReset, extras: viewExtras, conflicts: viewConflicts, stories: viewStories, settings: viewSettings, guestbook: viewGuestbook, people: viewPeople, log: viewLog };
 
   async function render() {
     try {
@@ -344,7 +382,7 @@ export function adminView(app) {
   return {
     type: 'admin', route: '/admin', title: '관리자 콘솔', body,
     size: { w: 920, h: 620 }, minSize: { w: 640, h: 400 }, origin: { x: 60, y: 30 },
-    mount() { render(); unwatch = api.watch(['admin', 'list', 'settings', 'guestbook'], () => { if (tab !== 'settings' && tab !== 'extras') render(); }); },
+    mount() { render(); unwatch = api.watch(['admin', 'list', 'settings', 'guestbook'], () => { if (tab !== 'settings' && tab !== 'extras' && tab !== 'reset') render(); }); },
     unmount() { unwatch?.(); },
   };
 }

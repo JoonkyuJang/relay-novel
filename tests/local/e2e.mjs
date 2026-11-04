@@ -69,7 +69,8 @@ async function handle(route) {
     if (sub) await c.query(`select set_config('request.jwt.claim.sub', $1, true)`, [sub]);
     const keys = Object.keys(args);
     const r = await c.query(`select public.${m[1]}(${keys.map((k, i) => `${k} => $${i + 1}`).join(', ')}) as r`,
-      keys.map(k => (args[k] !== null && typeof args[k] === 'object') ? JSON.stringify(args[k]) : args[k]));
+      keys.map(k => Array.isArray(args[k]) ? args[k]                          // text[] params (PostgREST sends arrays as arrays)
+        : (args[k] !== null && typeof args[k] === 'object') ? JSON.stringify(args[k]) : args[k]));
     await c.query('commit');
     return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(r.rows[0].r) });
   } catch (e) {
@@ -944,6 +945,40 @@ await step('versioned files: every module and stylesheet loads once, with its ?v
   assert.deepEqual(bare, [], 'loaded without a version');
   assert.equal(new Set(urls).size, urls.length, 'nothing fetched twice');
   assert.ok(urls.filter(u => u.endsWith('.js') || u.includes('.js?')).length >= 26);
+});
+
+// Last on purpose: it wipes the database.
+await step('관리 · 초기화: one counter, then everything (with a backup download first)', async () => {
+  await finishedStory('지워질 이야기');
+  await pool.query(`update app.counters set value = 7 where key = 'cat_pets'`);
+  const p = await newUser('초기화', null, { entered: false });
+  await adminLogin(p);
+  const w = win(p, 'admin');
+  await w.locator('.tabs >> text=초기화').click();
+  const catRow = w.locator('.reset-row', { hasText: '고양이 쓰다듬기 횟수' });
+  await catRow.locator('text=지금 7번').waitFor();
+  await catRow.locator('button').click();
+  await p.locator('.modal >> text=확인').click();
+  await w.locator('text=고양이 쓰다듬기 횟수 0으로 — 끝났어요.').waitFor();
+  assert.equal(Number((await pool.query(`select value from app.counters where key = 'cat_pets'`)).rows[0].value), 0);
+  await p.screenshot({ path: `${SHOTS}/37-admin-reset.png` });
+  // 전부 초기화: wrong word does nothing; '지우기' downloads a backup, then wipes
+  await w.locator('.reset-all button').click();
+  await p.locator('.modal input').fill('네');
+  await p.locator('.modal >> text=지우기').last().click();
+  await w.locator("text='지우기'라고 적어야 지워져요.").waitFor();
+  assert.ok(Number((await pool.query('select count(*) from app.stories')).rows[0].count) > 0);
+  await w.locator('.reset-all button').click();
+  await p.locator('.modal input').fill('지우기');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.locator('.modal >> text=지우기').last().click()]);
+  assert.match(dl.suggestedFilename(), /relay-novel-backup-.*\.json/);
+  await w.locator('text=전부 초기화 — 끝났어요.').waitFor();
+  const left = (await pool.query(`select (select count(*) from app.stories) s, (select count(*) from app.lines) l,
+    (select count(*) from app.stamps) st, (select count(*) from app.guestbook) g, (select count(*) from app.client_errors) e,
+    (select sum(value) from app.counters) c`)).rows[0];
+  assert.deepEqual(Object.values(left).map(Number), [0, 0, 0, 0, 0, 0]);
+  await p.locator('.icon[data-route="/stories"]').click();
+  await win(p, 'stories').locator('text=아직 이야기가 없어요').waitFor();
 });
 
 await step('no page errors', async () => { assert.deepEqual(errors, []); });

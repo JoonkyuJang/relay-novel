@@ -512,6 +512,34 @@ await test('내가 쓴 줄 by 이름 + 학번; crash reports are throttled and a
   await expectErr(rpc('admin_client_errors', {}, { as: 'authenticated', sub: USER }), 'not_admin');
 });
 
+await test('관리 · 초기화: counts, test stories only, then everything; admin-only', async () => {
+  await assert.rejects(rpc('admin_reset', { p_what: ['cat_pets'] }), /permission denied/);
+  await expectErr(rpc('admin_reset', { p_what: ['cat_pets'] }, { as: 'authenticated', sub: USER }), 'not_admin');
+  await expectErr(admin('admin_reset', { p_what: ['nope'] }), 'invalid_reset');
+  await expectErr(admin('admin_reset', { p_what: [] }), 'invalid_reset');
+  const t = (await rpc('create_story', { p_title: '[TEST] 지울 것', p_text: '테스트', ...who(9400) })).story_id;
+  const keep = (await rpc('create_story', { p_title: '남길 것', p_text: '진짜', ...who(9401) })).story_id;
+  const b = await rpc('claim_baton', { p_story_id: t, ...who(9402) });
+  await rpc('submit_line', { p_story_id: t, p_parent_id: b.parent_id, p_text: '둘째', ...who(9402), p_token: b.token });
+  await rpc('toggle_stamp', { p_line_id: (await rpc('get_story', { p_story_id: t })).lines[0].id, p_kind: 'sun', ...who(9403) });
+  await rpc('pet_cat'); await rpc('post_guestbook', { p_text: '안녕', ...who(9404) });
+  const before = await admin('admin_reset_counts');
+  assert.ok(before.test_stories >= 1 && before.cat_pets >= 1 && before.guestbook >= 1 && before.stamps >= 1);
+  // only the [TEST] stories
+  const mid = await admin('admin_reset', { p_what: ['test_stories', 'cat_pets'] });
+  assert.equal(mid.test_stories, 0); assert.equal(mid.cat_pets, 0);
+  await expectErr(rpc('get_story', { p_story_id: t }), 'story_not_found');
+  assert.equal((await rpc('get_story', { p_story_id: keep })).line_count, 1, 'other stories untouched');
+  // everything
+  const after = await admin('admin_reset', { p_what: ['cat_pets', 'trash', 'client_errors', 'stamps', 'guestbook', 'stories', 'log'] });
+  for (const k of ['cat_pets', 'trash', 'client_errors', 'stamps', 'guestbook', 'stories', 'lines', 'conflicts']) assert.equal(Number(after[k]), 0, k);
+  assert.equal(after.log, 1, 'one line saying it was reset');
+  assert.deepEqual(await rpc('list_stories'), []);
+  await rpc('post_guestbook', { p_text: '새 출발', ...who(9405) });
+  assert.equal(Number((await rpc('list_guestbook', {})).items[0].no), 1, 'guestbook numbers start again at #001');
+  assert.equal((await rpc('get_public_settings')).extras.cat_name, '문냥이', 'settings untouched');
+});
+
 await test('counters: cat pets; 휴지통 counts batons let go without a line', async () => {
   const before = (await rpc('get_about')).cat_pets;
   await Promise.all(Array.from({ length: 5 }, () => rpc('pet_cat')));

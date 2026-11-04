@@ -310,4 +310,6 @@ export const admin = {
   setGuestbookDeleted: (id, deleted) => call('admin_set_guestbook_deleted', { p_id: id, p_deleted: deleted }),
   lineStamps:        (lineId)      => call('admin_line_stamps', { p_line_id: lineId }),
   clientErrors:      (limit = 200) => call('admin_client_errors', { p_limit: limit }),
+  resetCounts:       ()            => call('admin_reset_counts'),
+  reset:             (what)        => call('admin_reset', { p_what: what }),
 };

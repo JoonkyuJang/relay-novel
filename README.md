@@ -97,6 +97,13 @@ Every extra has a switch in **관리자 콘솔 → 부가 기능** (inner tabs �
 - Live "n자 쓰는 중" uses a Realtime broadcast channel `typing:<storyId>` (numbers only, nothing stored).
 - Per-device choices (sound, sky override, screen saver off, 원고지 칸, memo) live in localStorage `rn.*`.
 
+## Starting the program (clean slate)
+
+관리자 콘솔 → **초기화**: reset the cat counter / 휴지통, clear browser errors, stamps, the
+guestbook (numbering restarts at #001), only the `[TEST]` stories left by the concurrency test,
+or everything at once (전부 초기화). Destructive ones ask you to type 지우기 and download a
+backup JSON first. Settings, 부가 기능 switches and admin accounts are never touched.
+
 ## Before every commit
 
 Run `node tools/version.mjs`. It rewrites the asset block in `index.html` so every CSS/JS URL

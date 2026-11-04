@@ -402,3 +402,11 @@ button.menu-name { font: inherit; color: inherit; text-decoration: underline dot
   .mine-lines li { grid-template-columns: 26px minmax(0, 1fr); }
   .mine-meta { grid-column: 2; padding-top: 0; }
 }
+
+/* ------------------------------------------------------------ 관리 · 초기화 */
+
+.reset-list { display: flex; flex-direction: column; border-top: 1px solid var(--rule); }
+.reset-row, .reset-all { display: flex; align-items: center; gap: 14px; padding: 9px 2px; border-bottom: 1px solid var(--rule); }
+.reset-all { margin-top: 14px; border: 2px solid #C23B32; padding: 12px 14px; }
+.btn.danger:not(:disabled) { border-color: #C23B32; color: #C23B32; }
+.btn.btn-primary.danger:not(:disabled) { background: #C23B32; color: #FFF9EF; }
