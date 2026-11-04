@@ -10,18 +10,31 @@ import { guestbookView } from './views/guestbook.js';
 import { loginView } from './views/login.js';
 import { helpView } from './views/help.js';
 import { adminView, adminStoryView } from './views/admin.js';
+import { readingView } from './views/reading.js';
+import { setExtras, on, bus } from './extras/extras.js';
+import { initDayNight, phaseButton, applySky } from './extras/daynight.js';
+import { initDesk, deadlineEl, soundButton, memoView, aboutView } from './extras/desk.js';
+import { initCat } from './extras/cat.js';
+import { initSaver } from './extras/saver.js';
+import { initFun } from './extras/fun.js';
+import { injectStampDefs } from './extras/stamps.js';
 
 const desktop = $('#desktop');
 const menubar = $('#menubar');
 const iconsNav = $('#icons');
 const dock = $('#dock');
 
+const tray = h('nav', { class: 'tray', hidden: true, 'aria-label': '접어 둔 창' }, h('span', { class: 'tray-label' }, '접어 둔 창'));
+desktop.append(tray);
+const trayList = h('span', { class: 'tray-list' });
+tray.append(trayList);
+
 let pending = null;          // route to open after logging in
 let presenceCount = null;
 
 const app = {
   settings: null,
-  crt: api.prefs.get('crt', '1') !== '0',
+  crt: api.prefs.get('crt') == null ? true : api.prefs.get('crt') !== '0',
   identity: () => api.getIdentity(),
   setCrt(v) {
     app.crt = v;
@@ -63,7 +76,10 @@ const app = {
   },
 };
 
-const wm = createWM(desktop, { onActiveChange });
+const wm = createWM(desktop, { onActiveChange, tray: trayList, canMinimize: () => on('minimize') });
+const trayObserver = new MutationObserver(() => { tray.hidden = !trayList.children.length; });
+trayObserver.observe(trayList, { childList: true });
+app.refreshMenubar = () => renderMenubar();
 
 function forEachView(fn) { for (const k of wm.keys()) fn(wm.get(k).view); }
 
@@ -81,6 +97,10 @@ function currentRoute() { return decodeURIComponent(location.hash.replace(/^#/, 
 function resolve(route) {
   const m = route.match(/^\/story\/([0-9a-f-]{36})$/i);
   if (m) return [`story:${m[1].toLowerCase()}`, () => storyView(app, m[1].toLowerCase())];
+  const r = route.match(/^\/read\/([0-9a-f-]{36})$/i);
+  if (r && on('reading')) return [`read:${r[1].toLowerCase()}`, () => readingView(app, r[1].toLowerCase())];
+  if (route === '/memo' && on('memo')) return ['memo', () => memoView(app)];
+  if (route === '/about' && on('about')) return ['about', () => aboutView(app)];
   const a = route.match(/^\/admin\/story\/([0-9a-f-]{36})$/i);
   if (a && app.admin) return [`admin-story:${a[1].toLowerCase()}`, () => adminStoryView(app, a[1].toLowerCase())];
   if (route === '/admin' && app.admin) return ['admin', () => adminView(app)];
@@ -113,7 +133,7 @@ function onActiveChange(win) {
 }
 
 function updateNav(route) {
-  const navRoute = route?.startsWith('/story/') ? '/stories' : route;
+  const navRoute = route?.startsWith('/story/') || route?.startsWith('/read/') ? '/stories' : route;
   for (const a of document.querySelectorAll('[data-route]')) {
     if (a.dataset.route === navRoute) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -133,10 +153,12 @@ function showLogin(reason = '') {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function runBoot() {
+  const data = Promise.all([api.getSettings().catch(() => null), api.listStories().catch(() => null)]);
+  const early = await Promise.race([data.then(([st]) => st), sleep(1200).then(() => null)]);
+  if (early?.extras && early.extras.boot_screen === false) return;
   const log = h('div', { class: 'bootlog', 'aria-hidden': 'true' });
   desktop.append(log);
   const quick = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const data = Promise.all([api.getSettings().catch(() => null), api.listStories().catch(() => null)]);
   const line = async (text, hi = false) => { log.append(h('div', { class: hi ? 'hi' : '' }, text || ' ')); if (!quick) await sleep(140); };
   const phone = isPhone();
   await line('연문회 OS 1.0', true);
@@ -152,25 +174,32 @@ async function runBoot() {
 // ------------------------------------------------------------ menu bar, icons, dock
 
 const presenceEl = h('span', { class: 'desk-only muted', hidden: true });
-const clockEl = h('span', { class: 'desk-only' }, fmtClock());
-setInterval(() => { clockEl.textContent = fmtClock(); }, 20000);
+const clockText = h('span', {}, fmtClock());
+const clockEl = h('span', { class: 'desk-only clock', id: 'clock' }, clockText);
+setInterval(() => { clockText.textContent = fmtClock(); }, 20000);
+const deadline = deadlineEl();
+let logoEl = null;
 
 function renderMenubar() {
   const ident = api.getIdentity();
   document.body.classList.toggle('not-entered', !api.hasEntered());
+  logoEl = h('a', { class: 'logo', href: '#/stories', 'aria-label': '연문회 OS — 이야기 서랍' }, icon('logo', 16), h('span', {}, '연문회 OS'));
+  presenceEl.hidden = !on('presence') || presenceCount == null;
   menubar.replaceChildren(...[
-    h('a', { class: 'logo', href: '#/stories', 'aria-label': '연문회 OS — 이야기 서랍' }, icon('logo', 16), h('span', {}, '연문회 OS')),
+    logoEl,
     h('button', { type: 'button', onclick: () => app.go('/help') }, '도움말'),
     app.admin ? h('button', { type: 'button', onclick: () => app.go('/admin') }, '관리') : null,
     h('span', { class: 'spacer' }),
+    deadline,
     presenceEl,
     api.hasEntered()
       ? ident
         ? [h('span', {}, `${ident.name} 님`), h('button', { type: 'button', onclick: logout }, '로그아웃')]
         : [h('span', { class: 'muted' }, '손님'), h('button', { type: 'button', onclick: () => app.requireLogin('', currentRoute()) }, '로그인')]
       : null,
-    h('button', { type: 'button', 'aria-pressed': String(app.crt), title: '화면 효과', onclick: () => app.setCrt(!app.crt) }, `CRT ${app.crt ? '켬' : '끔'}`),
-    clockEl].flat().filter(Boolean));
+    soundButton(renderMenubar),
+    h('button', { type: 'button', class: 'desk-only', 'aria-pressed': String(app.crt), title: '화면 효과', onclick: () => app.setCrt(!app.crt) }, `CRT ${app.crt ? '켬' : '끔'}`),
+    h('span', { class: 'desk-only clock-wrap' }, phaseButton(renderMenubar), clockEl)].flat().filter(Boolean));
 }
 
 function logout() {
@@ -201,13 +230,17 @@ function renderNav() {
 async function loadSettings() {
   try {
     app.settings = await api.getSettings();
+    setExtras(app.settings.extras);
+    // first visit: CRT follows the admin's default until the person picks
+    if (api.prefs.get('crt') == null) { app.crt = on('crt_default'); document.body.classList.toggle('crt', app.crt); }
+    renderMenubar();
     forEachView(v => v.onSettings?.());
   } catch { /* views fall back to defaults */ }
 }
 
 api.presence((n) => {
   presenceCount = n;
-  presenceEl.hidden = false;
+  presenceEl.hidden = !on('presence');
   presenceEl.textContent = `접속 중 ${n}명`;
 });
 
@@ -216,6 +249,14 @@ api.presence((n) => {
 document.body.classList.toggle('crt', app.crt);
 renderMenubar();
 renderNav();
+injectStampDefs();
+initDayNight(desktop);
+initDesk(app, wm, { desktop, iconsNav });
+const cat = initCat(app, wm, desktop);
+initSaver(app, wm, cat);
+initFun(app, wm, { cat, clockEl });
+bus.on('theme', () => renderMenubar());
+setInterval(() => { applySky(); }, 60e3);
 loadSettings();
 api.watch(['settings'], loadSettings);
 

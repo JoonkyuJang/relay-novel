@@ -7,13 +7,22 @@ import { prefs } from './api.js';
 const phoneQuery = window.matchMedia('(max-width: 767px)');
 export const isPhone = () => phoneQuery.matches;
 
-export function createWM(layer, { onActiveChange } = {}) {
+export function createWM(layer, { onActiveChange, tray = null, canMinimize = () => true } = {}) {
   const wins = new Map();          // key -> { key, view, el, z }
   let z = 10;
   let active = null;
   let cascade = 0;
 
   function bounds() { return { w: layer.clientWidth, h: layer.clientHeight }; }
+  const MIN = { w: 340, h: 240 };
+  const minOf = (view) => ({ w: view.minSize?.w ?? MIN.w, h: view.minSize?.h ?? MIN.h });
+
+  function save(win) {
+    if (win.view.remember === false || isPhone()) return;
+    const el = win.el;
+    prefs.setJSON(`win.${win.view.type}`, {
+      x: parseInt(el.style.left), y: parseInt(el.style.top), w: el.offsetWidth, h: el.offsetHeight });
+  }
 
   function clamp(el) {
     if (isPhone()) return;
@@ -26,10 +35,11 @@ export function createWM(layer, { onActiveChange } = {}) {
   function place(win) {
     const { view, el } = win;
     const b = bounds();
-    const w = Math.min(view.size?.w ?? 560, b.w - 40);
-    const ht = Math.min(view.size?.h ?? 520, b.h - 30);
-    el.style.width = `${w}px`; el.style.height = `${ht}px`;
     const saved = view.remember !== false ? prefs.getJSON(`win.${view.type}`) : null;
+    const min = minOf(view);
+    const w = Math.max(Math.min(saved?.w ?? view.size?.w ?? 560, b.w - 40), Math.min(min.w, b.w - 20));
+    const ht = Math.max(Math.min(saved?.h ?? view.size?.h ?? 520, b.h - 30), Math.min(min.h, b.h - 20));
+    el.style.width = `${w}px`; el.style.height = `${ht}px`;
     let x, y;
     if (saved) { x = saved.x; y = saved.y; }
     else if (view.position === 'center') { x = (b.w - w) / 2; y = Math.max(20, (b.h - ht) / 2 - 20); }
@@ -60,19 +70,60 @@ export function createWM(layer, { onActiveChange } = {}) {
         bar.removeEventListener('pointerup', up);
         bar.removeEventListener('pointercancel', up);
         clamp(el);
-        if (win.view.remember !== false) {
-          prefs.setJSON(`win.${win.view.type}`, { x: parseInt(el.style.left), y: parseInt(el.style.top) });
-        }
+        if (parseInt(el.style.left) !== ox || parseInt(el.style.top) !== oy) { win.restore = null; save(win); }
       };
       bar.addEventListener('pointermove', move);
       bar.addEventListener('pointerup', up);
       bar.addEventListener('pointercancel', up);
+    });
+    // double-click the title bar: zoom to fill the desktop / restore (like the old Mac zoom box)
+    bar.addEventListener('dblclick', (e) => {
+      if (isPhone() || win.view.resizable === false || e.target.closest('button')) return;
+      const el = win.el, b = bounds();
+      if (win.restore) {
+        Object.assign(el.style, win.restore); win.restore = null;
+      } else {
+        win.restore = { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height };
+        Object.assign(el.style, { left: '12px', top: '12px', width: `${Math.max(minOf(win.view).w, b.w - 160)}px`, height: `${b.h - 24}px` });
+      }
+      clamp(el); save(win);
+    });
+  }
+
+  function makeResizable(win) {
+    if (win.view.resizable === false) return;
+    const grip = h('span', { class: 'win-grip', 'aria-hidden': 'true', title: '크기 조절' });
+    win.el.append(grip);
+    grip.addEventListener('pointerdown', (e) => {
+      if (isPhone() || e.button !== 0) return;
+      e.preventDefault();
+      const el = win.el, b = bounds(), min = minOf(win.view);
+      const sx = e.clientX, sy = e.clientY, ow = el.offsetWidth, oh = el.offsetHeight;
+      const left = parseInt(el.style.left) || 0, top = parseInt(el.style.top) || 0;
+      grip.setPointerCapture(e.pointerId);
+      el.classList.add('resizing');
+      const move = (ev) => {
+        el.style.width = `${Math.round(Math.min(Math.max(min.w, ow + ev.clientX - sx), b.w - left - 4))}px`;
+        el.style.height = `${Math.round(Math.min(Math.max(min.h, oh + ev.clientY - sy), b.h - top - 4))}px`;
+      };
+      const up = () => {
+        el.classList.remove('resizing');
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', up);
+        grip.removeEventListener('pointercancel', up);
+        win.restore = null;
+        save(win);
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+      grip.addEventListener('pointercancel', up);
     });
   }
 
   function focus(key, { silent = false } = {}) {
     const win = wins.get(key);
     if (!win) return;
+    if (win.minimized) restore(key, { silent: true });
     if (active !== key) {
       if (active && wins.get(active)) wins.get(active).el.classList.remove('is-active');
       active = key;
@@ -93,31 +144,77 @@ export function createWM(layer, { onActiveChange } = {}) {
         view.closable === false ? h('span', { class: 'win-title-pad' })
           : h('button', { type: 'button', class: 'win-close', 'aria-label': `${view.title} 닫기`, onclick: () => close(key) }),
         titleEl,
-        h('span', { class: 'win-title-pad' })),
+        view.closable === false || view.minimizable === false || !canMinimize()
+          ? h('span', { class: 'win-title-pad' })
+          : h('button', { type: 'button', class: 'win-min', 'aria-label': `${view.title} 접어 두기`, title: '접어 두기', onclick: () => minimize(key) })),
       h('div', { class: 'win-body' }, view.body));
     if (view.className) el.classList.add(...view.className.split(' '));
     const win = { key, view, el, titleEl };
-    view.setTitle = (t) => { titleEl.textContent = t; };
+    view.setTitle = (t) => {
+      titleEl.textContent = t;
+      if (win.trayBtn) win.trayBtn.lastChild.textContent = t;
+      win.el.querySelector('.win-min')?.setAttribute('aria-label', `${t} 접어 두기`);
+    };
     wins.set(key, win);
     layer.append(el);
     place(win);
     makeDraggable(win);
+    makeResizable(win);
     el.addEventListener('pointerdown', () => { if (active !== key) focus(key); }, true);
     view.mount?.();
     focus(key, { silent });
     return win;
   }
 
+  // 접어 두기: hide the window and park a button in the tray.
+  function minimize(key) {
+    const win = wins.get(key);
+    if (!win || win.minimized || !tray || isPhone()) return;
+    closeProps();
+    win.minimized = true;
+    win.el.hidden = true;
+    win.trayBtn = h('button', { type: 'button', class: 'tray-btn', title: '다시 펼치기', onclick: () => focus(key) },
+      h('span', { class: 'tray-ico', 'aria-hidden': 'true' }), h('span', {}, win.titleEl.textContent));
+    tray.append(win.trayBtn);
+    tray.hidden = false;
+    if (active === key) {
+      win.el.classList.remove('is-active');
+      active = null;
+      const next = [...wins.values()].filter(w => !w.minimized).sort((a, b) => (+b.el.style.zIndex) - (+a.el.style.zIndex))[0];
+      if (next) focus(next.key); else onActiveChange?.(null);
+    }
+  }
+  function restore(key) {
+    const win = wins.get(key);
+    if (!win?.minimized) return;
+    win.minimized = false;
+    win.el.hidden = false;
+    win.trayBtn?.remove(); win.trayBtn = null;
+    if (tray && !tray.children.length) tray.hidden = true;
+    clamp(win.el);
+  }
+  // 창 정리하기: cascade every visible window from the top-left.
+  function tidy() {
+    const list = [...wins.values()].filter(w => !w.minimized).sort((a, b) => (+a.el.style.zIndex) - (+b.el.style.zIndex));
+    list.forEach((w, i) => {
+      w.el.style.left = `${40 + i * 28}px`; w.el.style.top = `${20 + i * 24}px`;
+      w.restore = null; clamp(w.el); save(w);
+    });
+    if (list.length) focus(list.at(-1).key);
+  }
+
   function close(key) {
     const win = wins.get(key);
     if (!win) return;
     closeProps();
+    win.trayBtn?.remove();
+    if (tray && !tray.children.length) tray.hidden = true;
     win.view.unmount?.();
     win.el.remove();
     wins.delete(key);
     if (active === key) {
       active = null;
-      const next = [...wins.values()].sort((a, b) => (+b.el.style.zIndex) - (+a.el.style.zIndex))[0];
+      const next = [...wins.values()].filter(w => !w.minimized).sort((a, b) => (+b.el.style.zIndex) - (+a.el.style.zIndex))[0];
       if (next) focus(next.key); else onActiveChange?.(null);
     }
   }
@@ -125,10 +222,12 @@ export function createWM(layer, { onActiveChange } = {}) {
   window.addEventListener('resize', () => { for (const w of wins.values()) clamp(w.el); });
 
   return {
-    open, close, focus,
+    open, close, focus, minimize, restore, tidy,
+    minimizeAll: () => { for (const k of [...wins.keys()]) minimize(k); },
     has: (key) => wins.has(key),
     get: (key) => wins.get(key),
     get active() { return active ? wins.get(active) : null; },
     keys: () => [...wins.keys()],
+    wins: () => [...wins.values()],
   };
 }

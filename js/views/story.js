@@ -1,6 +1,12 @@
 // One story: its lines, the writer reveal, and the baton/composer state machine.
+// 부가 기능 here: stamp pads + buttons, 꽉 채웠어요 mark, live "누군가 쓰는 중 (n자)",
+// 자리 나면 알려 주기, 원고지 writing box, finished-story header / 이야기 기록, completion effects.
 import * as api from '../api.js';
 import { h, icon, fmtTime, fmtCountdown, errorText, attachReveal } from '../ui.js';
+import { on, fun, bus, X, manuscript, reduceMotion } from '../extras/extras.js';
+import { fillPad, stampButtons, updateTicks, seal } from '../extras/stamps.js';
+import { relayRecord, recordView, gridIcon } from '../extras/record.js';
+import { play } from '../extras/sound.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const STATUS_CHIP = {
@@ -13,6 +19,7 @@ const STATUS_CHIP = {
 export function storyView(app, storyId) {
   const route = `/story/${storyId}`;
   let story = null;
+  let stamps = {};             // line_id -> { marks, counts, mine }
   let baton = null;            // my claim while writing
   let mode = 'idle';           // idle | writing | conflict | done
   let lastResult = null;
@@ -20,29 +27,40 @@ export function storyView(app, storyId) {
   let clockOffset = 0;
   let known = null;            // line ids already shown (to mark new ones)
   let revealedId = null;       // line whose 속성 window is open
-  let unwatch = null, ticker = null;
+  let othersTyping = null;     // live character count of whoever holds the baton
+  let notifyFree = false;
+  let unwatch = null, ticker = null, typing = null;
+  let gridMode = api.prefs.get('gridbox') == null ? !!X('grid_box_default') : api.prefs.get('gridbox') === '1';
   const serverNow = () => Date.now() + clockOffset;
 
   const bar = h('div', { class: 'win-bar' });
+  const head = h('div', { class: 'story-head', hidden: true });
   const list = h('ol', { class: 'lines' });
-  const scroll = h('div', { class: 'win-scroll' }, list);
+  const record = h('div', { class: 'story-record', hidden: true });
+  const scroll = h('div', { class: 'win-scroll' }, head, list, record);
+  const ticks = h('div', { class: 'stamp-ticks', hidden: true, 'aria-hidden': 'true' });
   const foot = h('div', { class: 'win-foot' });
   const live = h('div', { class: 'sr-only', 'aria-live': 'polite' });
   const body = document.createDocumentFragment();
-  body.append(bar, scroll, foot, live);
+  body.append(bar, scroll, ticks, foot, live);
 
   const view = {
     type: 'story', route, title: '불러오는 중…', body,
-    size: { w: 680, h: 600 }, origin: { x: 380, y: 50 },
+    size: { w: 720, h: 600 }, minSize: { w: 460, h: 380 }, origin: { x: 380, y: 50 },
+    storyId,
+    get storyData() { return story; },
     mount() {
       refresh();
       unwatch = api.watch([storyId], refresh);
       ticker = setInterval(tick, 1000);
       addEventListener('pagehide', onPageHide);
+      if (on('typing_count')) typing = api.typingChannel(storyId, (n) => { othersTyping = n; showTyping(); });
+      new ResizeObserver(() => placeTicks()).observe(scroll);
     },
     onFocus() { if (story && mode === 'idle') renderFoot(); },
+    onSettings() { if (story) renderAll(); },
     unmount() {
-      unwatch?.(); clearInterval(ticker);
+      unwatch?.(); clearInterval(ticker); typing?.close();
       removeEventListener('pagehide', onPageHide);
       if (baton) api.releaseBaton(storyId, baton.token).catch(() => {});
     },
@@ -65,27 +83,45 @@ export function storyView(app, storyId) {
       h('span', { class: 'faint' }, `RN-${storyId.slice(0, 4).toUpperCase()}`)].filter(Boolean));
   }
 
+  const isFull = (l) => fun('fun_full') && !l.removed && api.countChars(l.text) === story.max_chars;
+
   function lineItem(l, isNew) {
+    const pads = on('stamps');
     if (l.removed) {
-      return h('li', { class: 'line removed' },
+      return h('li', { class: `line removed${pads ? ' has-pad' : ''}` },
         h('span', { class: 'line-no' }, pad2(l.position)),
-        h('span', { class: 'line-text' }, '(관리자가 숨긴 줄)'), h('span'));
+        h('span', { class: 'line-text' }, '(관리자가 숨긴 줄)'), pads ? h('span', { class: 'stamp-pad' }) : null, h('span', { class: 'who-slot' }));
     }
-    const li = h('li', { class: `line${isNew ? ' is-new' : ''}${revealedId === l.id ? ' is-revealed' : ''}` });
+    const full = isFull(l);
+    const li = h('li', { class: `line${pads ? ' has-pad' : ''}${isNew ? ' is-new' : ''}${revealedId === l.id ? ' is-revealed' : ''}`, dataset: { id: l.id } });
     const who = h('button', {
       type: 'button', class: 'who', 'aria-label': `${l.position}번 줄 쓴 사람 보기`, 'aria-expanded': 'false',
     }, icon('person', 16));
-    attachReveal(who, () => ({
-      title: `${pad2(l.position)}번 줄 속성`,
-      rows: [['작성자', l.author_name], ['학번', l.student_id], ['쓴 시각', fmtTime(l.created_at)]],
-      onOpen: () => { revealedId = l.id; li.classList.add('is-revealed'); },
-      onClose: () => { revealedId = null; list.querySelector('.is-revealed')?.classList.remove('is-revealed'); },
-    }));
+    attachReveal(who, () => {
+      const n = api.countChars(l.text);
+      const st = stamps[l.id] ?? { counts: { sun: 0, laugh: 0, cur: 0 }, mine: [] };
+      stamps[l.id] = { marks: [], ...st };
+      return {
+        title: `${pad2(l.position)}번 줄 속성`,
+        rows: [['작성자', l.author_name], ['학번', l.student_id], ['쓴 시각', fmtTime(l.created_at)],
+               ['글자', full ? h('span', { class: 'full-note' }, gridIcon(14), ` ${n} / ${story.max_chars}자 꽉!`) : `${n} / ${story.max_chars}자`]],
+        extra: pads ? () => stampButtons(app, l, stamps[l.id], { onChange: refreshStamps }) : null,
+        onOpen: () => { revealedId = l.id; li.classList.add('is-revealed'); },
+        onClose: () => { revealedId = null; list.querySelector('.is-revealed')?.classList.remove('is-revealed'); },
+      };
+    });
+    const pad = pads ? h('span', { class: 'stamp-pad' }) : null;
+    if (pad) fillPad(pad, stamps[l.id]?.marks);
     li.append(
-      h('span', { class: 'line-no' }, pad2(l.position)),
+      h('span', { class: 'line-no' }, pad2(l.position),
+        full ? h('span', { class: 'full-mark', title: `딱 ${story.max_chars}자로 꽉 채운 줄`, 'aria-label': '꽉 채웠어요' }, gridIcon(16)) : null),
       h('span', { class: 'line-text' }, l.text, l.edited ? h('span', { class: 'edited' }, ' (수정됨)') : null),
-      who);
+      pad, who);
     return li;
+  }
+
+  function pendingText() {
+    return othersTyping != null && on('typing_count') ? `누군가 쓰는 중 (${othersTyping}자)` : '누군가 쓰는 중';
   }
 
   function renderLines() {
@@ -96,26 +132,67 @@ export function storyView(app, storyId) {
     if (story.status === 'open' && story.writing && mode !== 'writing') {
       items.push(h('li', { class: 'line pending' },
         h('span', { class: 'line-no' }, pad2(story.line_count + 1)),
-        h('span', { class: 'line-text' }, '▒▒▒▒▒▒▒▒▒▒ (누군가 쓰는 중)'), h('span')));
+        h('span', { class: 'line-text' }, '▒▒▒▒▒▒ ', h('span', { 'data-typing': '' }, pendingText()), h('span', { class: 'dots' }, '…')), h('span')));
     }
     if (!first) {
       const added = story.lines.filter(l => !known.has(l.id));
-      if (added.length) live.textContent = `새 줄: ${added.map(l => l.text).join(' ')}`;
+      if (added.length) {
+        live.textContent = `새 줄: ${added.map(l => l.text).join(' ')}`;
+        added.forEach(line => bus.emit('line-added', { storyId, line }));
+      }
     }
     known = ids;
     list.replaceChildren(...items);
-    if (first || nearBottom) scroll.scrollTop = scroll.scrollHeight;
+    renderHead();
+    if (first || nearBottom) scroll.scrollTop = story.status === 'completed' && first ? 0 : scroll.scrollHeight;
+    placeTicks();
+  }
+
+  function renderHead() {
+    const done = story.status === 'completed';
+    head.hidden = !done;
+    record.hidden = !done || !(on('relay_record') || on('manuscript'));
+    if (!done) return;
+    const d = (ts) => { const x = new Date(ts); return `${x.getMonth() + 1}.${pad2(x.getDate())}`; };
+    head.replaceChildren(
+      h('div', { class: 'story-head-text' },
+        h('h3', {}, story.title || '제목 없는 이야기'),
+        h('span', { class: 'muted' }, `${d(story.created_at)} 시작 · ${fmtTime(story.completed_at)} 완결`)),
+      seal(132, -8));
+    if (!record.hidden) record.replaceChildren(recordView(relayRecord(story)));
+  }
+
+  function placeTicks() {
+    if (!on('stamps')) { ticks.hidden = true; return; }
+    ticks.style.top = `${scroll.offsetTop}px`;
+    ticks.style.height = `${scroll.clientHeight}px`;
+    const items = [...list.children].filter(li => li.dataset.id)
+      .map(li => ({ el: li, n: stamps[li.dataset.id]?.marks?.length ?? 0 })).filter(i => i.n);
+    updateTicks(scroll, ticks, items);
+  }
+
+  function showTyping() {
+    for (const el of scroll.querySelectorAll('[data-typing]')) el.textContent = pendingText();
+    for (const el of foot.querySelectorAll('[data-typing-foot]')) el.textContent = othersTyping != null ? ` (${othersTyping}자)` : '';
   }
 
   function doneFoot() {
     const finishedByMe = lastResult?.result === 'accepted' && lastResult.story_status === 'completed';
-    const d = story.completed_at ? new Date(story.completed_at) : new Date();
-    return h('div', { class: 'done-row' },
-      h('span', { class: 'stamp', 'aria-hidden': 'true' },
-        h('b', {}, '완결'), h('small', {}, `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`)),
+    return [
       h('p', { style: 'margin:0' }, finishedByMe
         ? '마지막 줄을 썼어요. 이야기가 완결되었습니다!'
-        : `${story.line_count}줄로 완결된 이야기예요. 함께 써 주셔서 고마워요.`));
+        : `${story.line_count}줄로 완결된 이야기예요. 함께 써 주셔서 고마워요.`),
+      h('div', { class: 'actions', style: 'justify-content:flex-start' },
+        on('reading') ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.go(`/read/${storyId}`) }, '▶ 낭독회 열기') : null,
+        h('button', { type: 'button', class: 'btn', onclick: copyLink }, '링크 복사')),
+    ];
+  }
+
+  async function copyLink(e) {
+    const url = `${location.origin}${location.pathname}#/story/${storyId}`;
+    try { await navigator.clipboard.writeText(url); e.target.textContent = '복사했어요'; }
+    catch { e.target.textContent = url; }
+    setTimeout(() => { e.target.textContent = '링크 복사'; }, 2000);
   }
 
   function conflictFoot() {
@@ -139,49 +216,90 @@ export function storyView(app, storyId) {
     const ident = app.identity();
     const status = h('div', { class: 'status-line' });
     if (story.writing) {
-      status.append(icon('hourglass', 18), h('span', {}, `${story.line_count + 1}번째 줄 — 다른 사람이 쓰는 중이에요 · `),
-        h('span', { 'data-countdown': 'story' }, ''), h('span', {}, ' 남음'));
+      status.append(icon('hourglass', 18), h('span', {}, `${story.line_count + 1}번째 줄 — 다른 사람이 쓰는 중이에요`),
+        h('span', { 'data-typing-foot': '' }, othersTyping != null && on('typing_count') ? ` (${othersTyping}자)` : ''),
+        h('span', {}, ' · '), h('span', { 'data-countdown': 'story' }, ''), h('span', {}, ' 남음'));
     } else if (lastResult?.result === 'accepted') {
       status.append(h('span', {}, '줄이 올라갔어요. 고마워요!'));
     } else {
       status.append(h('span', { class: 'muted' }, `${story.line_count + 1}번째 줄을 이어 쓸 차례예요.`));
     }
+    const notifyBtn = story.writing && on('notify_free')
+      ? h('button', { type: 'button', class: 'btn', 'aria-pressed': String(notifyFree), onclick: () => { notifyFree = !notifyFree; renderFoot(); } },
+          notifyFree ? '✓ 자리 나면 알려 드려요' : '자리 나면 알려 주기')
+      : null;
     return [
       status,
       message ? h('div', { class: 'notice bad', role: 'alert' }, message) : null,
       h('div', { class: 'actions', style: 'align-items:center' },
         ident
-          ? [h('span', { class: 'muted', style: 'margin-right:auto' }, `${ident.name} 님으로 써요`),
+          ? [h('span', { class: 'muted', style: 'margin-right:auto' }, `${ident.name} 님으로 써요`), notifyBtn,
              h('button', { type: 'button', class: 'btn btn-primary', onclick: claim }, '이어 쓰기')]
-          : h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.requireLogin('글을 쓰려면 로그인해 주세요.', route) }, '로그인하고 이어 쓰기')),
+          : [notifyBtn, h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.requireLogin('글을 쓰려면 로그인해 주세요.', route) }, '로그인하고 이어 쓰기')]),
     ];
+  }
+
+  // 원고지 writing box: a grid mirror over an invisible textarea (IME, selection, keys keep working).
+  function gridBox(ta, max) {
+    const cells = h('div', { class: 'grid-cells', 'aria-hidden': 'true' });
+    const box = h('div', { class: 'grid-box' }, cells, ta);
+    ta.classList.add('grid-input');
+    const draw = () => {
+      const chars = [...ta.value.replace(/\n/g, ' ')];
+      const caret = [...ta.value.slice(0, ta.selectionStart ?? 0)].length;
+      const n = Math.max(max, chars.length + 1);
+      const focused = document.activeElement === ta;
+      cells.replaceChildren(...Array.from({ length: n }, (_, i) => h('span', {
+        class: `${i === caret && focused ? 'caret' : ''}${i >= max ? ' over' : ''}`, dataset: { i },
+      }, chars[i] ?? '')));
+    };
+    cells.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const i = Number(e.target.dataset?.i ?? NaN);
+      ta.focus();
+      if (!Number.isNaN(i)) { const off = [...ta.value].slice(0, i).join('').length; ta.setSelectionRange(off, off); }
+      draw();
+    });
+    for (const ev of ['input', 'keyup', 'select', 'focus', 'blur', 'compositionupdate']) ta.addEventListener(ev, () => requestAnimationFrame(draw));
+    draw();
+    return box;
   }
 
   function writingFoot() {
     const ta = h('textarea', { class: 'field', rows: 2, id: `ta-${storyId}`, value: api.getDraft(storyId), maxlength: baton.max_chars * 2 });
     const counter = h('span', { class: 'counter' });
     const submitBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: submit }, '올리기');
+    let lastKey = 0;
     const update = () => {
       const n = api.countChars(ta.value);
-      counter.textContent = `${n} / ${baton.max_chars}`;
+      const full = n === baton.max_chars && fun('fun_full');
+      counter.replaceChildren(...(full ? [gridIcon(14), ` ${n} / ${baton.max_chars}자 꽉!`] : [`${n} / ${baton.max_chars}`]));
       counter.classList.toggle('over', n > baton.max_chars);
+      counter.classList.toggle('full', full);
       api.setDraft(storyId, ta.value);
+      typing?.send(n);
     };
-    ta.addEventListener('input', update);
+    ta.addEventListener('input', () => {
+      update();
+      if (Date.now() - lastKey > 40) { lastKey = Date.now(); play('key'); }
+    });
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); submit(); }
       else if (e.key === 'Enter') e.preventDefault();      // one line only
     });
     update();
     setTimeout(() => ta.focus({ preventScroll: true }));
+    const toggleGrid = h('button', { type: 'button', class: 'btn-link', onclick: () => { gridMode = !gridMode; api.prefs.set('gridbox', gridMode ? '1' : '0'); renderFoot(); } },
+      gridMode ? '보통 칸으로' : '원고지 칸으로');
     return [
       baton.is_final ? h('div', { class: 'notice warn', style: 'display:flex;gap:10px;align-items:center' }, icon('warn', 20),
         h('span', {}, `이 줄이 이야기의 마지막 줄이에요. ${story.max_lines}줄의 끝을 맺어 주세요.`)) : null,
       h('div', { class: 'status-line' }, icon('hourglass', 18), h('b', {}, `${baton.position}번째 줄`),
         h('span', { style: 'flex:1' }), h('span', {}, '남은 시간 '), h('b', { 'data-countdown': 'mine' }, '')),
       h('div', { 'data-warnings': '' }),
-      h('label', { class: 'label', for: ta.id }, h('span', { class: 'label-row' }, h('span', {}, '내 줄'), counter)),
-      ta,
+      h('label', { class: 'label', for: ta.id }, h('span', { class: 'label-row' }, h('span', {}, '내 줄 ', toggleGrid),
+        counter)),
+      gridMode ? gridBox(ta, baton.max_chars) : ta,
       message ? h('div', { class: 'notice bad', role: 'alert' }, message) : null,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: cancel }, '취소'), submitBtn),
     ];
@@ -192,7 +310,7 @@ export function storyView(app, storyId) {
     const parts = mode === 'done' ? doneFoot()
       : mode === 'conflict' ? conflictFoot()
       : mode === 'writing' ? writingFoot() : idleFoot();
-    foot.replaceChildren(...[parts].flat().filter(Boolean));
+    foot.replaceChildren(...[parts].flat(Infinity).filter(Boolean));
     tick();
   }
 
@@ -217,23 +335,72 @@ export function storyView(app, storyId) {
     if (theirs && story.baton_expires_at) {
       const left = Date.parse(story.baton_expires_at) - serverNow();
       theirs.textContent = fmtCountdown(left);
-      if (left <= 0 && story.writing) { story.writing = false; renderAll(); }
+      if (left <= 0 && story.writing) { story.writing = false; onFreed(); renderAll(); }
     }
+  }
+
+  // ---------------------------------------------------------- effects
+
+  function onFreed() {
+    othersTyping = null;
+    if (!notifyFree || story.status !== 'open') return;
+    notifyFree = false;
+    play('ding', { force: true });
+    const win = foot.closest('.win');
+    win?.classList.add('flash');
+    setTimeout(() => win?.classList.remove('flash'), 2400);
+    if (document.hidden) {
+      const t = document.title;
+      document.title = `● 자리 났어요 — ${t}`;
+      document.addEventListener('visibilitychange', () => { document.title = t; }, { once: true });
+    }
+  }
+
+  function celebrate() {
+    if (!on('completion_fx')) return;
+    const win = foot.closest('.win');
+    play('chime');
+    if (!reduceMotion()) {
+      win?.classList.add('shake');
+      setTimeout(() => win?.classList.remove('shake'), 500);
+      const big = seal(180, -8);
+      big.classList.add('seal-drop');
+      win?.append(big);
+      setTimeout(() => big.remove(), 2600);
+    }
+    const last = story.lines.at(-1);
+    bus.emit('story-completed', { storyId, title: story.title, lastLine: last?.text ?? '', el: win });
   }
 
   // ---------------------------------------------------------- data + actions
 
+  async function refreshStamps() {
+    if (!on('stamps')) return;
+    try {
+      stamps = await api.getStoryStamps(storyId, app.identity()?.studentId ?? null);
+      for (const li of list.querySelectorAll('.line[data-id]')) {
+        const pad = li.querySelector('.stamp-pad');
+        if (pad) fillPad(pad, stamps[li.dataset.id]?.marks);
+      }
+      placeTicks();
+    } catch { /* stamps are decoration */ }
+  }
+
   async function refresh() {
     try {
-      const s = await api.getStory(storyId);
+      const [s] = await Promise.all([api.getStory(storyId), on('stamps')
+        ? api.getStoryStamps(storyId, app.identity()?.studentId ?? null).then(x => { stamps = x; }).catch(() => {})
+        : null]);
       const prevMode = mode, prevWriting = story?.writing, prevStatus = story?.status;
       story = s;
       clockOffset = Date.parse(s.server_now) - Date.now();
       view.setTitle?.(s.title || '제목 없는 이야기');
+      if (prevWriting && !s.writing) onFreed();
       renderBar();
       renderLines();
       if (mode !== 'writing' && (prevMode !== mode || prevWriting !== s.writing || prevStatus !== s.status || !foot.hasChildNodes())) renderFoot();
       else tick();
+      if (prevStatus === 'open' && s.status === 'completed') celebrate();
     } catch (e) {
       if (e.code === 'story_not_found') {
         view.setTitle?.('찾을 수 없음');
@@ -254,6 +421,7 @@ export function storyView(app, storyId) {
       clockOffset = Date.parse(baton.server_now) - Date.now();
       mode = 'writing';
       lastResult = null;
+      notifyFree = false;
       renderBar(); renderFoot();
       refresh();
     } catch (e) {
@@ -279,8 +447,10 @@ export function storyView(app, storyId) {
         parentId: baton.parent_id, text, token: baton.token, ...app.identity() });
       lastResult = { ...r, text: api.cleanLine(text) };
       baton = null; message = '';
+      typing?.send(null);
       if (r.result === 'accepted') {
         api.setDraft(storyId, '');
+        play('bell');
         mode = r.story_status === 'completed' ? 'done' : 'idle';
       } else {
         mode = 'conflict';
@@ -299,6 +469,7 @@ export function storyView(app, storyId) {
   async function cancel() {
     const b = baton;
     baton = null; mode = 'idle'; lastResult = null; message = '';
+    typing?.send(null);
     renderAll();
     if (b) { try { await api.releaseBaton(storyId, b.token); } catch { /* expires anyway */ } }
     refresh();

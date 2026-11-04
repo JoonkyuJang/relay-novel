@@ -29,15 +29,17 @@ Static frontend on GitHub Pages + a Supabase (Postgres) backend.
 
 ```
 index.html                          연문회 OS (single page: boot → login → windows; routes #/stories, #/story/<id>,
-                                    #/new, #/roster, #/guestbook, #/help)
+                                    #/new, #/roster, #/guestbook, #/help, #/read/<id>, #/memo, #/about)
 admin.html                          redirect to #/admin (the console is a 연문회 OS window, js/views/admin.js)
 story.html, export.html             redirects for old links
 css/base.css                        the whole visual system (tokens, windows, mobile layout, CRT)
+css/extras.css                      styles for the 부가 기능 (stamps, cat, sky, savers, amber, …)
 fonts/                              Neo둥근모 + 갈무리11 (subset), OFL — see fonts/README.md
 js/api.js                           the ONLY file that talks to the backend (+ local identity/prefs)
 js/wm.js                            window manager: draggable windows on desktop, one window at a time on phones
 js/index.js                         app shell: boot, login, menu bar, icons/dock, routing, presence
-js/views/*.js                       one file per window
+js/views/*.js                       one file per window (reading.js = 낭독회)
+js/extras/                          부가 기능, each switchable in 관리 · 부가 기능 (see below)
 js/config.js                        project URL + publishable key (safe to publish)
 js/vendor/                          supabase-js 2.117.3 (MIT), vendored
 supabase/migrations/                database schema + functions (applied by the GitHub integration)
@@ -70,6 +72,24 @@ There is no visible admin button. On the 연문회 OS login window, type the adm
 A wrong password shows the same message as any other login problem. The 관리 menu and the
 관리자 콘솔 window appear; 관리자 나가기 inside the console signs out.
 
+## 부가 기능 (extras)
+
+Every extra has a switch in **관리자 콘솔 → 부가 기능** (inner tabs 바탕화면 · 낮과 밤 · 화면 보호기 ·
+고양이 · 도장 · 완결 이야기 · 소리 · 숨은 재미). Changes save immediately and reach open screens live.
+
+- Storage: `app.settings.extras` (jsonb) merged over `app.extras_defaults()`;
+  `admin_update_settings` accepts only known keys with the same JSON type. The front-end copy of the
+  defaults is `js/extras/extras.js` — keep the two in sync when adding a key.
+- `js/extras/`: `extras.js` (settings, event bus, Seoul time), `stamps.js` + `stamp-art.js` (도장; outlines
+  generated from BM JUA), `cat.js` + `cat-sprites.js` (문냥이), `saver.js` (화면 보호기 3·6·10분),
+  `daynight.js` (sky by Seoul time, real moon phase), `desk.js` (메모장, 휴지통, 마감 시계, 우클릭 메뉴,
+  오늘의 첫 문장, 이 컴퓨터에 관하여), `record.js` (이야기 기록), `sound.js` (WebAudio, off by default per device),
+  `fun.js` (숨은 재미 — deliberately not in 도움말).
+- Database: `stamps`, `counters` (cat pets, unused batons) and RPCs `toggle_stamp`, `get_story_stamps`,
+  `pet_cat`, `story_cards`, `get_about`, `admin_line_stamps` (migration `20261106000000_extras.sql`).
+- Live "n자 쓰는 중" uses a Realtime broadcast channel `typing:<storyId>` (numbers only, nothing stored).
+- Per-device choices (sound, sky override, screen saver off, 원고지 칸, memo) live in localStorage `rn.*`.
+
 ## Changing the database
 
 Never edit an applied migration. Add a new file
@@ -79,7 +99,7 @@ Never edit an applied migration. Add a new file
 
 ```
 cd tests/local && npm install
-npm test        # resets a local DB, applies migrations, runs run.mjs (25 checks incl. races)
-npm run e2e     # browser flows with Playwright against the same local DB (16 flows, desktop + phone)
+npm test        # resets a local DB, applies migrations, runs run.mjs (30 checks incl. races)
+npm run e2e     # browser flows with Playwright against the same local DB (desktop + phone; ONLY=<name> runs one flow)
 ```
 `reset.sh` expects a local server on socket `/var/lib/postgresql/rn`, port 5433.

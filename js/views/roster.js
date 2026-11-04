@@ -30,7 +30,7 @@ export function rosterView() {
 
   return {
     type: 'roster', route: '/roster', title: '출석부', body,
-    size: { w: 420, h: 440 }, origin: { x: 220, y: 70 },
+    size: { w: 420, h: 440 }, minSize: { w: 340, h: 260 }, origin: { x: 220, y: 70 },
     mount() { refresh(); unwatch = api.watch(['list', 'settings'], refresh); },
     unmount() { unwatch?.(); },
   };

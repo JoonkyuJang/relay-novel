@@ -61,7 +61,7 @@ export function newStoryView(app) {
   body.append(form);
   return {
     type: 'new', route: '/new', title: '새 이야기', body,
-    size: { w: 460, h: 400 }, origin: { x: 300, y: 90 },
+    size: { w: 460, h: 400 }, minSize: { w: 380, h: 340 }, origin: { x: 300, y: 90 },
     mount() { update(); updateWho(); setTimeout(() => text.focus({ preventScroll: true })); },
     onFocus: updateWho,
     onSettings() { update(); updateWho(); },

@@ -147,6 +147,40 @@ export function postGuestbook(text, { name, studentId }) {
   return call('post_guestbook', { p_text: text, p_name: name, p_student_id: studentId, p_client: clientToken() });
 }
 
+// ---------------------------------------------------------------- 부가 기능
+
+export function toggleStamp(lineId, kind, { name, studentId }) {
+  return call('toggle_stamp', { p_line_id: lineId, p_kind: kind, p_name: name, p_student_id: studentId, p_client: clientToken() });
+}
+// -> { <line_id>: { marks: [[kind, x, y, rot]], counts: {sun, laugh, cur}, mine: [kind] } }
+export const getStoryStamps = (storyId, studentId = null) =>
+  call('get_story_stamps', { p_story_id: storyId, p_student_id: studentId });
+export const petCat = () => call('pet_cat');
+export const storyCards = () => call('story_cards');
+export const getAbout = () => call('get_about');
+
+// Live "누군가 쓰는 중 (23자)": a Realtime broadcast per story, numbers only.
+export function typingChannel(storyId, onCount) {
+  let ch = null;
+  try {
+    ch = sb.channel(`typing:${storyId}`, { config: { broadcast: { self: false } } });
+    ch.on('broadcast', { event: 'n' }, ({ payload }) => onCount?.(payload?.n ?? null)).subscribe();
+  } catch { ch = null; }
+  let last = 0, timer = null, pending = null;
+  return {
+    send(n) {                                  // throttled to ~3 per second
+      pending = n;
+      if (timer) return;
+      const wait = Math.max(0, 350 - (Date.now() - last));
+      timer = setTimeout(() => {
+        timer = null; last = Date.now();
+        ch?.send({ type: 'broadcast', event: 'n', payload: { n: pending } }).catch?.(() => {});
+      }, wait);
+    },
+    close() { clearTimeout(timer); try { ch && sb.removeChannel(ch); } catch { /* ignore */ } },
+  };
+}
+
 // Refresh this tab's own windows right after its own writes (no need to wait for Realtime).
 export function poke(keys) {
   for (const s of subscribers) if (s.keys.some(k => keys.includes(k))) notify(s);
@@ -225,4 +259,5 @@ export const admin = {
   exportAll:         ()            => call('admin_export'),
   listGuestbook:     ()            => call('admin_list_guestbook', {}),
   setGuestbookDeleted: (id, deleted) => call('admin_set_guestbook_deleted', { p_id: id, p_deleted: deleted }),
+  lineStamps:        (lineId)      => call('admin_line_stamps', { p_line_id: lineId }),
 };

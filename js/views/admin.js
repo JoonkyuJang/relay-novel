@@ -1,6 +1,7 @@
 // 관리자 콘솔 + 관리용 이야기 창. Only reachable after the hidden admin login.
 import * as api from '../api.js';
 import { h, fmtTime, relTime, errorText, osConfirm, osPrompt } from '../ui.js';
+import { DEFAULTS } from '../extras/extras.js';
 
 const A = api.admin;
 const short = (s, n = 8) => (s ? String(s).slice(0, n) : '');
@@ -25,11 +26,95 @@ const SETTINGS = [
   ['guestbook_max_chars', '방명록 글자 수', 'number'],
   ['guestbook_cooldown_seconds', '방명록 간격 (초)', 'number'],
   ['submissions_open', '글쓰기 열림', 'checkbox'],
+  ['allow_consecutive_lines', '같은 사람이 연달아 쓰기 허용', 'checkbox'],
   ['allow_new_stories', '새 이야기 허용', 'checkbox'],
   ['guestbook_open', '방명록 열림', 'checkbox'],
   ['show_student_id', '속성 창에 학번 표시', 'checkbox'],
   ['stats_public', '출석부 공개', 'checkbox'],
 ];
+
+// 부가 기능: grouped like the mockups. key 'col:x' = an existing settings column.
+const EXTRA_TABS = [
+  ['바탕화면', [
+    ['crt_default', 'CRT 화면 효과를 기본으로', '처음 온 사람 기준 · 각자 메뉴에서 바꿀 수 있어요'],
+    ['boot_screen', '부팅 화면', '로그인 전 연문회 OS 부팅 글자'],
+    ['presence', '접속 중 n명', '메뉴 막대'],
+    ['col:stats_public', '출석부 공개', ''],
+    ['col:guestbook_open', '방명록 열림', ''],
+    ['deadline_on', '마감 시계', '메뉴 막대에 남은 시간 · 휴대폰은 D-n'],
+    ['deadline', '마감 일시 (서울)', '밤 12시는 다음 날 0:00으로 적어요', 'datetime'],
+    ['context_menu', '오른쪽 클릭 메뉴', '휴대폰은 줄을 길게 누르기'],
+    ['minimize', '창 접어 두기', '제목 막대의 _ 단추'],
+    ['trash', '휴지통', '안 쓰고 놓은 바통 수 (숫자만)'],
+    ['memo', '메모장', '이 기기에만 저장 · 아무도 못 봐요'],
+    ['first_sentence', '오늘의 첫 문장', '바탕화면 붙임쪽지'],
+    ['typing_count', '누군가 쓰는 중 글자 수', '숫자만 실시간으로'],
+    ['notify_free', '자리 나면 알려 주기', '바통이 풀리면 종 + 제목 깜빡임'],
+    ['grid_box_default', '원고지 쓰기 칸을 기본으로', '각자 바꿀 수 있어요'],
+    ['about', '이 컴퓨터에 관하여', '오른쪽 클릭 메뉴에서'],
+  ]],
+  ['낮과 밤', [
+    ['daynight', '낮과 밤 바탕화면', '서울 시간 · 아침 · 낮 · 노을 · 밤'],
+    ['daynight_override', '각자 바꾸기 허용', '시계 옆 해·달 아이콘'],
+    ['moon_phase', '실제 달 모양', ''],
+  ]],
+  ['화면 보호기', [
+    ['saver_typing', '이어 쓰는 화면', ''], ['saver_typing_min', '… 몇 분 뒤', '', 'number'],
+    ['saver_stars', '별 헤는 밤', ''], ['saver_stars_min', '… 몇 분 뒤', '', 'number'],
+    ['cat_sleep', '고양이 낮잠', ''], ['cat_sleep_min', '… 몇 분 뒤', '', 'number'],
+    ['saver_completed_only', '완결된 이야기 줄만', '끄면 진행 중인 이야기 줄도'],
+    ['saver_phone', '휴대폰에서도', ''],
+    ['saver_typewriter', '타자기 소리', '소리를 켠 사람에게만'],
+  ]],
+  ['고양이', [
+    ['cat', '고양이', '바탕화면에 한 마리'],
+    ['cat_name', '이름', '마우스를 올리면 보여요', 'text'],
+    ['cat_wander', '돌아다니기 · 창 위 낮잠', ''],
+    ['cat_pet_count', '쓰다듬기 횟수', '야옹 아래 (모두의 합계)'],
+    ['cat_reach', '쓰다듬어 줘 · 두리번', '커서가 가까이 오면'],
+    ['cat_belly', '가끔 벌러덩', ''],
+    ['cat_wink', '100번째마다 윙크', '희귀 동작'],
+    ['cat_jump', '완결 점프', ''],
+    ['cat_phone', '휴대폰 메뉴 위에', ''],
+  ]],
+  ['도장', [
+    ['stamps', '도장', '참 잘했어요 · 재밌어요 · 다음이 궁금해요'],
+    ['stamp_size', '줄 옆 작은 도장 크기 (px)', '20 ~ 32', 'number'],
+    ['stamp_ticks', '스크롤 막대 눈금', '도장 많은 줄을 빨간 눈금으로'],
+    ['stamp_help', '도움말에 도장 설명', ''],
+  ]],
+  ['완결 이야기', [
+    ['reading', '낭독회', '완결된 이야기에 ▶ 낭독회'],
+    ['reading_voice', '삐삐 목소리', '글자마다 짧은 소리 · 줄마다 다른 높이'],
+    ['manuscript', '원고지 매수', '200자 원고지 기준'],
+    ['relay_record', '이어달리기 기록', '쓰인 시각 띠 + 빠른 바통 · 긴 기다림'],
+    ['completion_fx', '완결 순간 효과', '창 흔들림 + 완결 도장 + 고양이 점프 + 종소리'],
+    ['reading_credits', '낭독회 끝에 함께 쓴 사람', '이름만 가나다순 (학번 없이, 어느 줄인지 연결 없이)'],
+  ]],
+  ['소리', [
+    ['sound', '소리 기능', '끄면 아무 소리도 나지 않아요'],
+    ['sound_default', '처음 온 사람은 소리 켬', '끄면 각자 켜야 들려요 (권장)'],
+  ]],
+  ['숨은 재미', [
+    ['fun', '숨은 재미 전체', '끄면 아래가 모두 꺼져요'],
+    ['fun_full', '꽉 채웠어요', '글자 수 제한을 딱 맞춘 줄에 원고지 아이콘'],
+    ['fun_amber', '호박색 단말기', '"호박"(ghqkr) 입력 · 휴대폰은 로고 다섯 번'],
+    ['fun_meow', '방명록에 "야옹"', '고양이가 놀라 달려가요'],
+    ['fun_trash', '휴지통 와르르', '두 번 누르면'],
+    ['fun_clock', '시계 열 번', '원고지 시간으로'],
+    ['fun_tidy', '메모장 "/정리"', '창들이 가지런히'],
+    ['fun_seosi', '메모장 "서시" · "윤동주"', '별이 떨어져요'],
+    ['fun_eagle', '"독수리"', '독수리가 날아가고 고양이가 하악'],
+    ['fun_catreads', '낮잠 자던 고양이의 낭독', '고양이가 누운 창의 이야기가 끝나면 마지막 줄을 삐삐로'],
+  ]],
+];
+
+const toLocalKST = (iso) => {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '';
+  return new Date(t + 9 * 3600e3).toISOString().slice(0, 16);
+};
+const fromLocalKST = (v) => (v ? `${v}:00+09:00` : null);
 
 export function adminView(app) {
   let tab = 'conflicts';
@@ -47,8 +132,9 @@ export function adminView(app) {
 
   const TABS = [
     ['conflicts', '충돌'], ['stories', '이야기'], ['settings', '설정'],
-    ['guestbook', '방명록'], ['people', '참여자'], ['log', '기록'],
+    ['guestbook', '방명록'], ['people', '참여자'], ['log', '기록'], ['extras', '부가 기능'],
   ];
+  let extraTab = EXTRA_TABS[0][0];
   function renderTabs() {
     tabs.replaceChildren(...TABS.map(([k, label]) => h('button', {
       type: 'button', 'aria-pressed': String(tab === k),
@@ -174,7 +260,41 @@ export function adminView(app) {
         h('td', { class: 'muted' }, h('code', { style: 'word-break:break-all' }, r.details ? JSON.stringify(r.details).slice(0, 240) : ''))))));
   }
 
-  const VIEWS = { conflicts: viewConflicts, stories: viewStories, settings: viewSettings, guestbook: viewGuestbook, people: viewPeople, log: viewLog };
+  async function viewExtras() {
+    const st = await A.getSettings();
+    const x = { ...DEFAULTS, ...(st.extras ?? {}) };
+    const inner = h('div', { class: 'extra-tabs', role: 'group', 'aria-label': '부가 기능 묶음' },
+      EXTRA_TABS.map(([name]) => h('button', { type: 'button', 'aria-pressed': String(extraTab === name),
+        onclick: () => { extraTab = name; render(); } }, name)));
+    const save = async (patch, label) => {
+      try { await A.updateSettings(patch); notice(`${label} 저장했어요.`, 'ok'); }
+      catch (e) { notice(errorText(e)); }
+    };
+    const rows = EXTRA_TABS.find(t => t[0] === extraTab)[1].map(([key, label, hint, type]) => {
+      const col = key.startsWith('col:') ? key.slice(4) : null;
+      const value = col ? st[col] : x[key];
+      const patchOf = (v) => (col ? { [col]: v } : { extras: { [key]: v } });
+      const note = hint ? h('span', { class: 'faint' }, hint) : null;
+      if (type === 'number') {
+        const inp = h('input', { type: 'number', class: 'field sm', value, min: 1, style: 'width:90px', onchange: () => save(patchOf(Number(inp.value)), label) });
+        return h('label', { class: 'extra-row' }, h('span', { class: 'extra-label' }, label, note), inp);
+      }
+      if (type === 'text') {
+        const inp = h('input', { type: 'text', class: 'field sm', value, maxlength: 12, style: 'width:140px', onchange: () => inp.value.trim() && save(patchOf(inp.value.trim()), label) });
+        return h('label', { class: 'extra-row' }, h('span', { class: 'extra-label' }, label, note), inp);
+      }
+      if (type === 'datetime') {
+        const inp = h('input', { type: 'datetime-local', class: 'field sm', value: toLocalKST(value), style: 'width:200px', onchange: () => inp.value && save(patchOf(fromLocalKST(inp.value)), label) });
+        return h('label', { class: 'extra-row' }, h('span', { class: 'extra-label' }, label, note), inp);
+      }
+      const cb = h('input', { type: 'checkbox', checked: !!value, onchange: () => save(patchOf(cb.checked), label) });
+      return h('label', { class: 'extra-row check' }, cb, h('span', { class: 'extra-label' }, label, note));
+    });
+    return [inner, h('div', { class: 'extra-list' }, rows),
+      h('p', { class: 'muted', style: 'margin:0' }, '바꾸면 바로 저장되고, 열려 있는 모든 화면에 곧 반영돼요.')];
+  }
+
+  const VIEWS = { extras: viewExtras, conflicts: viewConflicts, stories: viewStories, settings: viewSettings, guestbook: viewGuestbook, people: viewPeople, log: viewLog };
 
   async function render() {
     try {
@@ -202,8 +322,8 @@ export function adminView(app) {
 
   return {
     type: 'admin', route: '/admin', title: '관리자 콘솔', body,
-    size: { w: 920, h: 620 }, origin: { x: 60, y: 30 },
-    mount() { render(); unwatch = api.watch(['admin', 'list', 'settings', 'guestbook'], () => { if (tab !== 'settings') render(); }); },
+    size: { w: 920, h: 620 }, minSize: { w: 640, h: 400 }, origin: { x: 60, y: 30 },
+    mount() { render(); unwatch = api.watch(['admin', 'list', 'settings', 'guestbook'], () => { if (tab !== 'settings' && tab !== 'extras') render(); }); },
     unmount() { unwatch?.(); },
   };
 }
@@ -222,7 +342,7 @@ export function adminStoryView(app, storyId) {
   body.append(bar, scroll);
   const view = {
     type: 'admin-story', route: `/admin/story/${storyId}`, title: '관리 · 이야기', body,
-    size: { w: 960, h: 600 }, origin: { x: 120, y: 60 },
+    size: { w: 960, h: 600 }, minSize: { w: 720, h: 400 }, origin: { x: 120, y: 60 },
     mount() { render(); unwatch = api.watch(['admin', storyId], render); },
     unmount() { unwatch?.(); },
   };
@@ -290,7 +410,15 @@ export function adminStoryView(app, storyId) {
           if (t !== null) act(() => A.editLine(l.id, t), '고쳤어요.');
         }),
         btn(l.deleted_at ? '보이기' : '숨기기', () => act(() => A.setLineDeleted(l.id, !l.deleted_at), l.deleted_at ? '다시 보이게 했어요.' : '숨겼어요.')),
-      ];
+        l.kind === 'canonical' ? btn('도장', async () => {
+          try {
+            const list = await A.lineStamps(l.id);
+            const NAME = { sun: '참 잘했어요', laugh: '재밌어요', cur: '다음이 궁금해요' };
+            await osConfirm(list.length ? list.map(x => `${NAME[x.kind]} — ${person(x.name, x.student_id)} · ${fmtTime(x.created_at)}`).join('\n') : '아직 찍힌 도장이 없어요.',
+              { title: `${pad2(l.position)}번 줄 도장`, cancel: '닫기', ok: '확인' });
+          } catch (e) { notice(errorText(e)); }
+        }) : null,
+      ].filter(Boolean);
       if (l.kind === 'canonical' && l.id !== s.head_line_id) {
         const p = previewSetHead(s, l);
         out.push(btn('여기까지 되감기', async () => {

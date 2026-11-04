@@ -1,6 +1,7 @@
 // 방명록: free messages, writer hidden behind the same 속성 window.
 import * as api from '../api.js';
 import { h, icon, fmtTime, errorText, attachReveal } from '../ui.js';
+import { bus } from '../extras/extras.js';
 
 const pad3 = (n) => String(n).padStart(3, '0');
 
@@ -114,7 +115,9 @@ export function guestbookView(app) {
     if (n > max) { msg.replaceChildren(h('div', { class: 'notice bad' }, errorText({ code: 'too_long', detail: { max } }))); return; }
     busy = true; send.disabled = true; msg.replaceChildren();
     try {
-      await api.postGuestbook(ta.value, ident);
+      const text = ta.value;
+      await api.postGuestbook(text, ident);
+      bus.emit('guestbook-posted', { text });
       ta.value = ''; update();
       await refresh();
       scroll.scrollTop = 0;
@@ -130,7 +133,7 @@ export function guestbookView(app) {
 
   return {
     type: 'guestbook', route: '/guestbook', title: '방명록', body,
-    size: { w: 760, h: 620 }, origin: { x: 140, y: 34 },
+    size: { w: 760, h: 620 }, minSize: { w: 420, h: 380 }, origin: { x: 140, y: 34 },
     mount() { update(); updateWho(); refresh(); unwatch = api.watch(['guestbook'], refresh); },
     unmount() { unwatch?.(); clearInterval(cdTimer); },
     onFocus: updateWho,

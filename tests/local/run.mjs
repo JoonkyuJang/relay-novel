@@ -381,5 +381,104 @@ await test('guestbook: admin hide/restore, closed setting, length setting, expor
   await assert.rejects(rpc('admin_list_guestbook', {}), /permission denied/);
 });
 
+await test('no consecutive lines by the same person (when 2+ lines allowed), switchable', async () => {
+  await admin('admin_update_settings', { p: { lines_per_person_per_story: 2, max_lines: 20 } });
+  const id = (await rpc('create_story', { p_title: null, p_text: '하나', ...who(5000) })).story_id;
+  await expectErr(rpc('claim_baton', { p_story_id: id, ...who(5000) }), 'consecutive');
+  const head = (await rpc('get_story', { p_story_id: id })).head_line_id;
+  await expectErr(rpc('submit_line', { p_story_id: id, p_parent_id: head, p_text: '몰래', ...who(5000), p_token: null }), 'consecutive');
+  const b = await rpc('claim_baton', { p_story_id: id, ...who(5001) });
+  await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '둘', ...who(5001), p_token: b.token });
+  const c = await rpc('claim_baton', { p_story_id: id, ...who(5000) });          // allowed again after someone else
+  await rpc('submit_line', { p_story_id: id, p_parent_id: c.parent_id, p_text: '셋', ...who(5000), p_token: c.token });
+  await expectErr(rpc('claim_baton', { p_story_id: id, ...who(5000) }), 'person_limit');
+  await admin('admin_update_settings', { p: { allow_consecutive_lines: true } });
+  const d = await rpc('claim_baton', { p_story_id: id, ...who(5001) });
+  await rpc('submit_line', { p_story_id: id, p_parent_id: d.parent_id, p_text: '넷', ...who(5001), p_token: d.token });
+  assert.equal((await rpc('get_public_settings')).allow_consecutive_lines, true);
+  await admin('admin_update_settings', { p: { allow_consecutive_lines: false, lines_per_person_per_story: 1 } });
+});
+
+await test('extras: defaults, admin merge, unknown keys and wrong types rejected', async () => {
+  const s = await rpc('get_public_settings');
+  assert.equal(s.extras.cat_name, '문냥이'); assert.equal(s.extras.stamps, true);
+  assert.equal(s.extras.deadline, '2026-11-23T00:00:00+09:00');
+  const r = await admin('admin_update_settings', { p: { extras: { cat_name: '백냥이', saver_typing_min: 4 } } });
+  assert.equal(r.extras.cat_name, '백냥이'); assert.equal(r.extras.saver_typing_min, 4); assert.equal(r.extras.cat, true);
+  await expectErr(admin('admin_update_settings', { p: { extras: { nope: true } } }), 'invalid_settings');
+  await expectErr(admin('admin_update_settings', { p: { extras: { cat: 'yes' } } }), 'invalid_settings');
+  await expectErr(admin('admin_update_settings', { p: { extras: [1] } }), 'invalid_settings');
+  await assert.rejects(rpc('admin_update_settings', { p: { extras: { cat: false } } }), /permission denied/);
+  await admin('admin_update_settings', { p: { extras: { cat_name: '문냥이', saver_typing_min: 3 } } });
+});
+
+await test('stamps: one of each kind per person, toggle off, counts, mine, positions, admin view', async () => {
+  const id = (await rpc('create_story', { p_title: '도장', p_text: '첫 줄', ...who(6000) })).story_id;
+  const line = (await rpc('get_story', { p_story_id: id })).lines[0].id;
+  const a = await rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6001) });
+  assert.deepEqual([a.stamped, a.counts.sun], [true, 1]);
+  await rpc('toggle_stamp', { p_line_id: line, p_kind: 'laugh', ...who(6001) });
+  await rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6002), p_student_id: '2026-006002' });
+  const res = await Promise.allSettled(Array.from({ length: 8 }, () =>
+    rpc('toggle_stamp', { p_line_id: line, p_kind: 'cur', ...who(6003) })));
+  assert.ok(res.every(r => r.status === 'fulfilled'));          // even toggles → back to off
+  let all = await rpc('get_story_stamps', { p_story_id: id, p_student_id: '2026 006001' });
+  assert.deepEqual(all[line].counts, { sun: 2, laugh: 1, cur: 0 });
+  assert.deepEqual(all[line].mine.sort(), ['laugh', 'sun']);
+  for (const [k, x, y, r] of all[line].marks) { assert.ok(['sun', 'laugh'].includes(k)); assert.ok(x >= 0 && x <= 1 && y >= 0 && y <= 1 && Math.abs(r) <= 25); }
+  const off = await rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6001) });
+  assert.deepEqual([off.stamped, off.counts.sun], [false, 1]);
+  assert.equal((await rpc('get_story_stamps', { p_story_id: id })) [line].mine.length, 0);
+  await expectErr(rpc('toggle_stamp', { p_line_id: line, p_kind: 'heart', ...who(6001) }), 'invalid_kind');
+  assert.equal((await admin('admin_line_stamps', { p_line_id: line })).length, 2);
+  await assert.rejects(rpc('admin_line_stamps', { p_line_id: line }), /permission denied/);
+  await admin('admin_set_line_deleted', { p_line_id: line, p_deleted: true });
+  await expectErr(rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6009) }), 'line_not_found');
+  assert.deepEqual(await rpc('get_story_stamps', { p_story_id: id }), {});
+  await admin('admin_set_line_deleted', { p_line_id: line, p_deleted: false });
+  await admin('admin_update_settings', { p: { extras: { stamps: false } } });
+  await expectErr(rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6009) }), 'feature_off');
+  await admin('admin_update_settings', { p: { extras: { stamps: true } } });
+});
+
+await test('counters: cat pets; 휴지통 counts batons let go without a line', async () => {
+  const before = (await rpc('get_about')).cat_pets;
+  await Promise.all(Array.from({ length: 5 }, () => rpc('pet_cat')));
+  assert.equal(Number(await rpc('pet_cat')), before + 6);
+  const trash = async () => (await rpc('get_about')).trash;
+  const t0 = await trash();
+  const id = (await rpc('create_story', { p_title: null, p_text: '하나', ...who(7000) })).story_id;
+  let b = await rpc('claim_baton', { p_story_id: id, ...who(7001) });
+  await rpc('release_baton', { p_story_id: id, p_token: b.token });                 // let go → +1
+  assert.equal(await trash(), t0 + 1);
+  b = await rpc('claim_baton', { p_story_id: id, ...who(7001) });
+  await rpc('claim_baton', { p_story_id: id, ...who(7001) });                       // re-claim own live baton → +0
+  assert.equal(await trash(), t0 + 1);
+  await su(`update app.stories set baton_expires_at = now() - interval '1 second' where id = $1`, [id]);
+  assert.equal(await trash(), t0 + 1);                                               // expiry itself is silent
+  b = await rpc('claim_baton', { p_story_id: id, ...who(7002) });                   // taking over an expired one → +1
+  assert.equal(await trash(), t0 + 2);
+  await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '둘', ...who(7002), p_token: b.token });
+  assert.equal(await trash(), t0 + 2);                                               // a written line → +0
+  await admin('admin_update_settings', { p: { extras: { cat: false } } });
+  await expectErr(rpc('pet_cat'), 'feature_off');
+  await admin('admin_update_settings', { p: { extras: { cat: true } } });
+});
+
+await test('story cards and about', async () => {
+  await admin('admin_update_settings', { p: { max_lines: 2 } });
+  const id = (await rpc('create_story', { p_title: '카드', p_text: '가나다', ...who(8000) })).story_id;
+  const b = await rpc('claim_baton', { p_story_id: id, ...who(8001) });
+  const r = await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '라마바사', ...who(8001), p_token: b.token });
+  assert.equal(r.story_status, 'completed');
+  const line = (await rpc('get_story', { p_story_id: id })).lines[1].id;
+  await rpc('toggle_stamp', { p_line_id: line, p_kind: 'cur', ...who(8002) });
+  const card = (await rpc('story_cards'))[id];
+  assert.deepEqual(card, { chars: 7, writers: 2, stamps: { sun: 0, laugh: 0, cur: 1 } });
+  const about = await rpc('get_about');
+  assert.ok(about.stories >= 1 && about.lines >= 2 && about.stamps >= 1 && about.since);
+  await admin('admin_update_settings', { p: { max_lines: 20 } });
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);
 await pool.end();

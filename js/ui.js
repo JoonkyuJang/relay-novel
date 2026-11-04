@@ -90,9 +90,10 @@ function onEsc(e) { if (e.key === 'Escape') { const a = openProps?.anchor; close
 function showProps(anchor, spec, pinned) {
   closeProps();
   const phone = isPhone();
-  const el = h('div', { class: `props${phone ? ' sheet' : ''}`, role: 'dialog', 'aria-label': spec.title },
+  const el = h('div', { class: `props${phone ? ' sheet' : ''}${spec.extra ? ' wide' : ''}`, role: 'dialog', 'aria-label': spec.title },
     h('div', { class: 'props-title stripes' }, h('span', {}, spec.title)),
-    h('dl', {}, spec.rows.filter(r => r[1] != null && r[1] !== '').map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])));
+    h('dl', {}, spec.rows.filter(r => r[1] != null && r[1] !== '').map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
+    spec.extra?.() ?? null);
   document.body.append(el);
   if (!phone) {
     const r = anchor.getBoundingClientRect();
@@ -155,6 +156,7 @@ const MESSAGES = {
   story_closed:        () => '이미 완결된 이야기예요.',
   baton_held:          () => '다른 사람이 이어 쓰는 중이에요. 잠시 후 다시 시도해 주세요.',
   person_limit:        (d) => `이 이야기에는 한 사람당 ${d?.max}줄까지 쓸 수 있어요.`,
+  consecutive:         () => '바로 앞 줄을 쓴 사람은 연달아 쓸 수 없어요. 다른 사람이 한 줄 이은 뒤에 다시 써 주세요.',
   invalid_parent:      () => '이야기가 바뀌었어요. 새로고침해 주세요.',
   too_many_conflicts:  () => '관리자 확인을 기다리는 줄이 너무 많아요.',
   stats_hidden:        () => '출석부는 아직 공개되지 않았어요.',
@@ -171,6 +173,9 @@ const MESSAGES = {
   broken_tree:         () => '줄 연결이 끊겨 있어요.',
   invalid_status:      () => '잘못된 상태예요.',
   line_not_found:      () => '줄을 찾을 수 없어요.',
+  feature_off:         () => '지금은 꺼져 있는 기능이에요.',
+  invalid_kind:        () => '알 수 없는 도장이에요.',
+  invalid_settings:    () => '설정 값을 확인해 주세요.',
 };
 
 export function errorText(err) {

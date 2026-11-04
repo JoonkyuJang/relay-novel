@@ -74,7 +74,7 @@ export function loginView(app, { reason = '' } = {}) {
   body.append(scroll);
   return {
     type: 'login', route: '/login', title: '연문회 OS — 로그인', body,
-    size: { w: 460, h: 500 }, position: 'center', remember: false, closable: false,
+    size: { w: 460, h: 500 }, position: 'center', remember: false, closable: false, resizable: false,
     className: 'login-win',
     mount() { setTimeout(() => (name.value ? sid : name).focus({ preventScroll: true }), 50); },
   };

@@ -148,8 +148,15 @@ textarea.field { resize: none; display: block; }
 .win-close:hover { background: var(--ink); }
 .win-title-pad { width: 15px; flex: none; }
 .win-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.win-grip {
+  position: absolute; right: 0; bottom: 0; width: 15px; height: 15px; cursor: nwse-resize; touch-action: none; z-index: 2;
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--ink) 3px 4px);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+.win.resizing { user-select: none; }
+.win.resizing .win-body { pointer-events: none; }
 .win-bar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 7px 14px; border-bottom: 1px solid var(--ink); }
-.win-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--ink) var(--paper); }
+.win-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-color: var(--ink) var(--paper); }
 .win-foot { flex: none; border-top: 2px solid var(--ink); padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
 .win-foot .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
@@ -285,6 +292,7 @@ body.crt::after {
     width: auto !important; height: auto !important; min-width: 0; box-shadow: 3px 3px 0 var(--ink);
   }
   .win:not(.is-active) { display: none; }
+  .win-grip { display: none; }
   .win-title { height: 32px; cursor: default; background-size: 100% 13px; }
   .win.has-bootlog { top: 118px !important; }
   .not-entered .dock { display: none; }

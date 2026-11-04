@@ -1,6 +1,8 @@
 // 이야기 서랍: every story, ongoing first.
 import * as api from '../api.js';
 import { h, relTime, errorText } from '../ui.js';
+import { on, manuscript } from '../extras/extras.js';
+import { seal, stampSvg, KINDS } from '../extras/stamps.js';
 
 function chip(s) {
   if (s.status === 'completed') return h('span', { class: 'chip grass' }, '완결');
@@ -30,9 +32,26 @@ export function storiesView(app) {
       h('span', { class: 'when' }, relTime(s.status === 'completed' ? s.completed_at : s.updated_at)));
   }
 
+  // 완결: a card with a small seal, 원고지 매수, writers, stamp totals and ▶ 낭독회.
+  function card(s, info) {
+    const name = s.title || s.first_line || '(제목 없음)';
+    const d = new Date(s.completed_at);
+    const meta = [`${s.line_count}줄`, info && on('manuscript') ? `원고지 ${manuscript(info.chars)}매` : null,
+      info ? `${info.writers}명` : null, `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, '0')} 완결`].filter(Boolean).join(' · ');
+    return h('div', { class: 'done-card' },
+      h('div', { class: 'done-card-text' },
+        h('a', { href: `#/story/${s.id}`, class: 'done-card-title' }, name),
+        h('span', { class: 'muted' }, meta),
+        h('div', { class: 'done-card-row' },
+          info && on('stamps') ? KINDS.map(k => h('span', { class: 'tot', title: `${k}` }, stampSvg(k, { size: 18 }), h('span', {}, info.stamps?.[k] ?? 0))) : null,
+          h('span', { style: 'flex:1' }),
+          on('reading') ? h('a', { href: `#/read/${s.id}`, class: 'btn btn-sm' }, '▶ 낭독회') : null)),
+      h('a', { href: `#/story/${s.id}`, class: 'done-card-seal', tabindex: '-1', 'aria-hidden': 'true' }, seal(78, -7)));
+  }
+
   async function refresh() {
     try {
-      const list = await api.listStories();
+      const [list, cards] = await Promise.all([api.listStories(), api.storyCards().catch(() => ({}))]);
       const open = list.filter(s => s.status === 'open');
       const done = list.filter(s => s.status === 'completed')
         .sort((a, b) => Date.parse(b.completed_at) - Date.parse(a.completed_at));
@@ -47,8 +66,8 @@ export function storiesView(app) {
       rows.replaceChildren(...[
         open.length ? h('div', { class: 'drawer-sep' }, '진행 중') : null,
         ...open.map(row),
-        done.length ? h('div', { class: 'drawer-sep' }, '완결') : null,
-        ...done.map(row)].filter(Boolean));
+        done.length ? h('div', { class: 'drawer-sep' }, '완결 · 완결된 순서') : null,
+        ...done.map(d => card(d, cards[d.id]))].filter(Boolean));
     } catch (e) {
       rows.replaceChildren(h('div', { class: 'empty' }, errorText(e)));
     }
@@ -56,7 +75,7 @@ export function storiesView(app) {
 
   return {
     type: 'stories', route: '/stories', title: '이야기 서랍', body,
-    size: { w: 480, h: 470 }, origin: { x: 36, y: 24 },
+    size: { w: 520, h: 500 }, minSize: { w: 380, h: 300 }, origin: { x: 36, y: 24 },
     mount() { refresh(); unwatch = api.watch(['list'], refresh); },
     unmount() { unwatch?.(); },
   };

@@ -97,6 +97,7 @@ const win = (p, key) => p.locator(`.win[data-key="${key}"]`);
 
 let passed = 0;
 async function step(name, fn) {
+  if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
   try { await fn(); passed++; console.log('  ✓', name); }
   catch (e) { console.error('  ✗', name, '\n    ', e.message.split('\n').slice(0, 6).join('\n     ')); process.exitCode = 1; }
 }
@@ -240,8 +241,13 @@ await step('final-line warning and 완결 stamp', async () => {
   await w.locator('text=마지막 줄이에요').waitFor();
   await w.locator('textarea').fill('그리고 마을은 다시 조용해졌다.');
   await w.locator('text=올리기').click();
-  await w.locator('.stamp').waitFor();
+  await w.locator('.story-head:not([hidden]) svg[aria-label="완결 도장"]').waitFor();
   assert.match(await w.textContent(), /이야기가 완결되었습니다/);
+  assert.ok(await e.locator('.seal-drop').count() <= 1);
+  assert.match(await w.locator('.record summary').textContent(), /4줄 · 원고지 [\d.]+매 · 4명/);
+  await w.locator('.record summary').click();
+  await w.locator('.relay-facts >> text=가장 빠른 바통').waitFor();
+  await e.waitForTimeout(2700);
   await e.screenshot({ path: `${SHOTS}/05-complete.png` });
   await e.click('.icon[data-route="/stories"]');
   assert.match(await win(e, 'stories').textContent(), /완결/);
@@ -315,11 +321,35 @@ await step('desktop windows: drag, position remembered, focus order, close', asy
   await b.reload();
   const again = await win(b, 'stories').boundingBox();
   assert.ok(Math.abs(again.x - after.x) < 4 && Math.abs(again.y - after.y) < 4, 'remembered');
+  // resize from the corner grip; can't go below the minimum; size is remembered
+  const grip = win(b, 'stories').locator('.win-grip');
+  const g = await grip.boundingBox();
+  const before = await win(b, 'stories').boundingBox();
+  await b.mouse.move(g.x + 8, g.y + 8); await b.mouse.down();
+  await b.mouse.move(g.x + 128, g.y + 88, { steps: 5 }); await b.mouse.up();
+  const bigger = await win(b, 'stories').boundingBox();
+  assert.ok(Math.abs(bigger.width - before.width - 120) < 4 && Math.abs(bigger.height - before.height - 80) < 4, 'resized');
+  const g2 = await grip.boundingBox();
+  await b.mouse.move(g2.x + 8, g2.y + 8); await b.mouse.down();
+  await b.mouse.move(g2.x - 900, g2.y - 900, { steps: 5 }); await b.mouse.up();
+  const tiny = await win(b, 'stories').boundingBox();
+  assert.ok(tiny.width >= 379 && tiny.height >= 299, `min size kept (${tiny.width}x${tiny.height})`);
+  await b.reload();
+  const kept = await win(b, 'stories').boundingBox();
+  assert.ok(Math.abs(kept.width - tiny.width) < 3 && Math.abs(kept.height - tiny.height) < 3, 'size remembered');
+  // double-click the title to zoom, again to restore
+  await win(b, 'stories').locator('.win-title h2').dblclick();
+  const zoomed = await win(b, 'stories').boundingBox();
+  assert.ok(zoomed.width > 1000, 'zoomed');
+  await win(b, 'stories').locator('.win-title h2').dblclick();
+  assert.ok(Math.abs((await win(b, 'stories').boundingBox()).width - kept.width) < 3, 'restored');
+  await b.screenshot({ path: `${SHOTS}/17-resized.png` });
+
   await b.click('#menubar >> text=도움말');
   await win(b, 'help').waitFor();
   assert.ok(await win(b, 'help').evaluate(el => el.classList.contains('is-active')));
   assert.match(b.url(), /#\/help$/);
-  await win(b, 'stories').locator('.win-foot').click({ position: { x: 8, y: 8 } });
+  await win(b, 'stories').locator('.win-bar').click({ position: { x: 8, y: 8 } });
   assert.ok(await win(b, 'stories').evaluate(el => el.classList.contains('is-active')));
   assert.match(b.url(), /#\/stories$/);
   await win(b, 'help').locator('.win-close').click();
@@ -510,6 +540,217 @@ await step('remote self-test page passes against local DB (as admin, cleans up)'
   await p.waitForFunction(() => /ALL PASSED|FAILED|ERROR/.test(document.querySelector('#out').textContent), null, { timeout: 60000 });
   const out = await p.textContent('#out');
   assert.match(out, /ALL PASSED/, out);
+});
+
+// A finished 4-line story written by four people (straight through the RPCs).
+let finishedN = Math.floor(Math.random() * 9000) * 10;   // fresh 학번 per run (story_limit)
+async function finishedStory(title) {
+  const q = (sql, a) => pool.query(sql, a).then(r => r.rows[0].r);
+  const id = (await q(`select public.create_story($1, '첫 번째 줄이에요.', '하나', $2, 'seed') as r`, [title, `2026810${finishedN++}`])).story_id;
+  await pool.query(`update app.stories set max_lines = 4 where id = $1`, [id]);
+  for (const [i, t] of ['두 번째, 이어서 써요.', '세 번째! 거의 다 왔어요.', '네 번째로 끝.'].entries()) {
+    const b = await q(`select public.claim_baton($1, $2, $3, 'seed') as r`, [id, `작가${i + 2}`, `2026800${i + 2}`]);
+    await q(`select public.submit_line($1, $2, $3, $4, $5, 'seed', $6) as r`, [id, b.parent_id, t, `작가${i + 2}`, `2026800${i + 2}`, b.token]);
+  }
+  return id;
+}
+
+await step('낭독회: plays every line in the beep voice and ends with the seal and names', async () => {
+  const p = await newUser('청중', '2026100099');
+  const doneId = await finishedStory('낭독할 이야기');
+  await p.goto(`${BASE}/#/story/${doneId}`);
+  const storyId = doneId;
+  const w = win(p, `story:${storyId}`);
+  await w.locator('text=▶ 낭독회 열기').click();
+  const r = win(p, `read:${storyId}`);
+  await r.locator('select[aria-label="빠르기"]').selectOption('2');
+  await r.locator('select[aria-label="줄 사이"]').selectOption('1000');
+  await r.locator('button[aria-label="재생"]').click();
+  await r.locator('.read-cur').filter({ hasText: /\S/ }).waitFor();
+  await p.waitForTimeout(800);
+  await p.screenshot({ path: `${SHOTS}/20-reading.png` });
+  await r.locator('.read-cur >> text=끝.').waitFor({ timeout: 30000 });
+  assert.match(await r.locator('.read-credits').textContent(), /함께 쓴 사람/);
+  assert.equal(await r.locator('.read-segs span.done').count(), 4);
+  await p.screenshot({ path: `${SHOTS}/21-reading-end.png` });
+  await p.click('.icon[data-route="/stories"]');
+  const card = win(p, 'stories').locator('.done-card').first();
+  await card.waitFor();
+  assert.match(await card.textContent(), /원고지 [\d.]+매 · 4명/);
+  await p.screenshot({ path: `${SHOTS}/22-drawer-cards.png` });
+});
+
+await step('도장: stamp from the 속성 window, counts, toggle off, pad and scroll ticks', async () => {
+  const p = await newUser('도장꾼', '2026100777');
+  const storyId = await finishedStory('도장 이야기');
+  await p.goto(`${BASE}/#/story/${storyId}`);
+  const w = win(p, `story:${storyId}`);
+  await w.locator('.line .who').first().click();
+  const box = p.locator('.props .stamp-buttons');
+  await box.waitFor();
+  await box.locator('.stamp-btn').nth(1).click();
+  await p.locator('.props .stamp-btn.is-mine >> text=재밌어요').waitFor();
+  assert.match(await box.locator('.stamp-btn').nth(1).textContent(), /재밌어요 1/);
+  await box.locator('.stamp-btn').nth(0).click();
+  await p.locator('.props .stamp-btn.is-mine').nth(1).waitFor();
+  await p.waitForTimeout(500);
+  if (process.env.DEBUGSTAMP) console.log('DEBUG', await p.evaluate(() => { const e = document.elementFromPoint(500, 400); return e.outerHTML.slice(0, 300) + ' | ' + e.parentElement?.className + ' | ' + getComputedStyle(e).width; }));
+  await p.screenshot({ path: `${SHOTS}/23-stamp-props.png` });
+  await p.keyboard.press('Escape');
+  await w.locator('.line').first().locator('.stamp-mark').nth(1).waitFor();
+  // another person sees the pad but no "mine"
+  const q = await newUser('구경꾼', '2026100778');
+  await q.goto(`${BASE}/#/story/${storyId}`);
+  const w2 = win(q, `story:${storyId}`);
+  await w2.locator('.line').first().locator('.stamp-mark').nth(1).waitFor();
+  await w2.locator('.line .who').first().click();
+  assert.equal(await q.locator('.props .stamp-btn.is-mine').count(), 0);
+  assert.match(await q.locator('.props .stamp-buttons').textContent(), /잘했어요 1.*재밌어요 1/);
+  // toggle off
+  await w.locator('.line .who').first().click();
+  await p.locator('.props .stamp-btn').nth(1).click();
+  await p.waitForFunction(() => /재밌어요 0/.test(document.querySelector('.props .stamp-buttons')?.textContent ?? ''));
+  const n = (await pool.query(`select count(*)::int as n from app.stamps where student_id = '2026100777'`)).rows[0].n;
+  assert.equal(n, 1);
+});
+
+await step('꽉 채웠어요: a line of exactly the limit gets the 원고지 mark', async () => {
+  const text = '가'.repeat(99) + '.';
+  const id = (await pool.query(`select public.create_story('꽉', $1, '꽉작가', '20267000', 'seed') as r`, [text])).rows[0].r.story_id;
+  const p = await newUser('꽉독자', '2026100701');
+  await p.goto(`${BASE}/#/story/${id}`);
+  const w = win(p, `story:${id}`);
+  await w.locator('.full-mark').waitFor();
+  await w.locator('.line .who').first().click();
+  assert.match(await p.locator('.props').textContent(), /100 \/ 100자 꽉!/);
+});
+
+await step('고양이: pet → 야옹 with the shared count; admin can turn it off', async () => {
+  const p = await newUser('집사', '2026100801');
+  await p.goto(`${BASE}/`);
+  const cat = p.locator('.cat');
+  await cat.waitFor();
+  assert.equal(await cat.getAttribute('title'), '문냥이');
+  const before = Number((await pool.query(`select value from app.counters where key='cat_pets'`)).rows[0].value);
+  await cat.click({ force: true });
+  await p.locator('.cat-say >> text=야옹!').waitFor();
+  assert.match(await p.locator('.cat-say').textContent(), new RegExp(`\\(${before + 1}\\)`));
+  await p.screenshot({ path: `${SHOTS}/24-cat-pet.png` });
+  await pool.query(`update app.settings set extras = extras || '{"cat": false}'`);
+  await p.reload();
+  await p.waitForSelector('.win[data-key="stories"]');
+  await p.waitForTimeout(500);
+  assert.ok(await cat.isHidden());
+  await pool.query(`update app.settings set extras = extras - 'cat'`);
+});
+
+await step('바탕화면: right-click menu, about window, 접어 두기 tray, memo /정리, sticky note', async () => {
+  const p = await newUser('바탕', '2026100802');
+  await p.goto(`${BASE}/`);
+  await p.waitForSelector('.win[data-key="stories"]');
+  await p.locator('.sticky').waitFor();
+  await p.mouse.click(900, 700, { button: 'right' });
+  await p.locator('.ctx >> text=창 정리하기').waitFor();
+  await p.screenshot({ path: `${SHOTS}/25-context-menu.png` });
+  await p.locator('.ctx >> text=이 컴퓨터에 관하여').click();
+  await win(p, 'about').locator('text=기억 장치').waitFor();
+  assert.match(await win(p, 'about').textContent(), /문냥이 1마리/);
+  await p.screenshot({ path: `${SHOTS}/26-about.png` });
+  await win(p, 'about').locator('.win-close').click();
+  await win(p, 'stories').locator('.win-min').click();
+  await p.locator('.tray-btn >> text=이야기 서랍').waitFor();
+  assert.ok(await win(p, 'stories').isHidden());
+  await p.screenshot({ path: `${SHOTS}/27-tray.png` });
+  await p.locator('.tray-btn').click();
+  await win(p, 'stories').waitFor();
+  assert.equal(await p.locator('.tray-btn').count(), 0);
+  await p.goto(`${BASE}/#/memo`);
+  const m = win(p, 'memo');
+  await m.locator('textarea').fill('다음 차례에 쓸 것');
+  await m.locator('textarea').press('Enter');
+  await m.locator('textarea').type('/정리');
+  await m.locator('textarea').press('Enter');
+  assert.equal(await m.locator('textarea').inputValue(), '다음 차례에 쓸 것\n');
+  await p.reload();
+  await p.goto(`${BASE}/#/memo`);
+  assert.match(await win(p, 'memo').locator('textarea').inputValue(), /다음 차례에 쓸 것/);
+});
+
+await step('화면 보호기: starts on demand, the waking key is swallowed', async () => {
+  const p = await newUser('졸린이', '2026100803');
+  await p.goto(`${BASE}/`);
+  await p.waitForSelector('.win[data-key="stories"]');
+  await p.mouse.click(900, 700, { button: 'right' });
+  await p.locator('.ctx >> text=화면 보호기 지금 켜기').click();
+  await p.locator('.saver[data-kind="typing"]').waitFor({ timeout: 10000 });
+  await p.locator('.saver-meta:not([hidden])').waitFor({ timeout: 20000 });
+  await p.screenshot({ path: `${SHOTS}/28-saver-typing.png` });
+  assert.ok(await p.locator('.cat').isHidden());
+  await p.keyboard.press('a');
+  await p.waitForSelector('.saver', { state: 'detached' });
+  await p.locator('.cat').waitFor();
+});
+
+await step('호박색 단말기 and 낮과 밤 switch', async () => {
+  const p = await newUser('밤손님', '2026100804');
+  await p.goto(`${BASE}/#/story/${storyId}`);
+  await p.waitForSelector(`.win[data-key="story:${storyId}"]`);
+  await p.locator('.phase-ico').click();            // auto -> 늘 낮
+  await p.locator('.phase-ico').click();            // -> 늘 밤
+  await p.waitForFunction(() => document.body.classList.contains('phase-night'));
+  await p.waitForTimeout(700);
+  await p.screenshot({ path: `${SHOTS}/29-night.png` });
+  await p.locator('.phase-ico').click();            // -> 자동
+  for (const k of ['KeyG', 'KeyH', 'KeyQ', 'KeyK', 'KeyR']) await p.keyboard.press(k);
+  await p.waitForFunction(() => document.body.classList.contains('amber'));
+  await p.locator('.amber-toast').waitFor();
+  await p.screenshot({ path: `${SHOTS}/30-amber.png` });
+  await p.locator('.amber-toast >> text=돌아가기').click();
+  assert.ok(!(await p.evaluate(() => document.body.classList.contains('amber'))));
+});
+
+await step('관리 · 부가 기능: inner tabs save switches and the deadline', async () => {
+  const p = await newUser('운영진', null, { entered: false });
+  await adminLogin(p);
+  const w = win(p, 'admin');
+  await w.locator('.tabs >> text=부가 기능').click();
+  await w.locator('.extra-tabs >> text=고양이').click();
+  await w.locator('.extra-row >> text=이름').waitFor();
+  const name = w.locator('.extra-row:has-text("이름") input');
+  await name.fill('백냥이');
+  await name.press('Tab');
+  await w.locator('text=이름 저장했어요').waitFor();
+  await p.screenshot({ path: `${SHOTS}/31-admin-extras.png` });
+  await w.locator('.extra-tabs >> text=바탕화면').click();
+  const dl = w.locator('.extra-row:has-text("마감 일시") input');
+  assert.equal(await dl.inputValue(), '2026-11-23T00:00');
+  await dl.fill('2026-11-30T00:00');
+  await dl.press('Tab');
+  await w.locator('text=마감 일시 (서울) 저장했어요').waitFor();
+  const x = (await pool.query(`select extras from app.settings`)).rows[0].extras;
+  assert.equal(x.cat_name, '백냥이'); assert.equal(x.deadline, '2026-11-30T00:00:00+09:00');
+  await pool.query(`update app.settings set extras = '{}'`);
+});
+
+await step('mobile: stamp sheet buttons, cat on the dock, D-n deadline', async () => {
+  const p = await newUser('폰도장', '2026100805', { mobile: true });
+  const storyId = await finishedStory('폰 도장 이야기');
+  await p.goto(`${BASE}/#/story/${storyId}`);
+  const w = win(p, `story:${storyId}`);
+  await w.locator('.story-head h3').waitFor();
+  assert.equal(await w.locator('.win-scroll').evaluate(el => el.scrollTop), 0, 'finished story opens at its title');
+  const hb = await w.locator('.story-head').boundingBox(), sb = await w.locator('.win-scroll').boundingBox();
+  assert.ok(hb.y >= sb.y - 1, 'head not clipped');
+  await p.screenshot({ path: `${SHOTS}/34-mobile-finished-top.png` });
+  await w.locator('.line .who').first().tap();
+  await p.locator('.props.sheet .stamp-btn').first().waitFor();
+  await p.screenshot({ path: `${SHOTS}/32-mobile-stamp-sheet.png` });
+  await p.locator('.props.sheet .stamp-btn').nth(2).tap();
+  await p.locator('.props.sheet .stamp-btn.is-mine').waitFor();
+  await p.keyboard.press('Escape');
+  assert.match(await p.locator('.menubar .deadline').textContent(), /^D-\d+$/);
+  await p.locator('.cat').waitFor();
+  await p.screenshot({ path: `${SHOTS}/33-mobile-story.png` });
 });
 
 await step('no page errors', async () => { assert.deepEqual(errors, []); });
