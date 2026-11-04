@@ -22,7 +22,7 @@ export const $ = (sel, root = document) => root.querySelector(sel);
 // ------------------------------------------------------------ pixel icons (static, trusted markup)
 
 const ICONS = {
-  logo:   '<path d="M8 1l7 7-7 7-7-7z" fill="currentColor"/><path d="M8 5l3 3-3 3-3-3z" fill="#FFF9EF"/>',
+  logo:   '<path fill-rule="evenodd" d="M8 1l7 7-7 7-7-7zM8 5l-3 3 3 3 3-3z" fill="currentColor"/>',
   folder: '<path data-fill d="M1.5 4.5h5l1 1h7v9h-13z" fill="#FFF9EF" stroke="currentColor"/><path d="M1.5 6.5h13" stroke="currentColor"/>',
   newdoc: '<path data-fill d="M3.5 1.5h7l3 3v10h-10z" fill="#FFF9EF" stroke="currentColor"/><path d="M10.5 1.5v3h3" fill="none" stroke="currentColor"/><path d="M5 12l1-3 4-4 2 2-4 4z" fill="currentColor"/>',
   roster: '<path data-fill d="M2.5 2.5h11v12h-11z" fill="#FFF9EF" stroke="currentColor"/><path d="M6 1h4v3H6z" fill="currentColor"/><path d="M4 6.5h2M7 6.5h5M4 9.5h2M7 9.5h5M4 12.5h2M7 12.5h5" stroke="currentColor"/>',
@@ -107,10 +107,8 @@ function showProps(anchor, spec, pinned) {
   anchor.setAttribute('aria-expanded', 'true');
   openProps = { el, anchor, onClose: spec.onClose, pinned };
   spec.onOpen?.();
-  setTimeout(() => {
-    document.addEventListener('pointerdown', outside, true);
-    document.addEventListener('keydown', onEsc, true);
-  });
+  document.addEventListener('keydown', onEsc, true);
+  setTimeout(() => document.addEventListener('pointerdown', outside, true));   // not the opening click
 }
 function scheduleClose() {
   clearTimeout(hoverTimer);
@@ -162,13 +160,17 @@ const MESSAGES = {
   stats_hidden:        () => '출석부는 아직 공개되지 않았어요.',
   guestbook_closed:    () => '지금은 방명록이 닫혀 있어요.',
   cooldown:            (d) => `${d?.wait ?? 30}초 뒤에 다시 남길 수 있어요.`,
-  not_found:           () => 'Not found.',
-  not_admin:           () => 'This account is not an admin.',
-  permission_denied:   () => 'Permission denied.',
-  login_failed:        (d) => `Login failed: ${d?.message ?? ''}`,
-  raise_max_lines_first: () => 'This story is at its line limit. Raise its max lines first.',
-  use_set_head:        () => 'No official line at that position. Use "set as head" instead.',
-  parent_not_canonical:() => "This line's parent is not on the official path.",
+  not_found:           () => '찾을 수 없어요.',
+  not_admin:           () => '관리자 권한이 없어요.',
+  permission_denied:   () => '권한이 없어요. 다시 로그인해 주세요.',
+  login_failed:        () => '로그인 정보를 확인해 주세요.',
+  raise_max_lines_first: () => '이 이야기는 줄 수 한도에 도달했어요. 먼저 한도를 늘려 주세요.',
+  use_set_head:        () => '그 자리에 정식 줄이 없어요. "여기를 끝으로"를 써 주세요.',
+  parent_not_canonical:() => '이 줄의 앞 줄이 정식 줄이 아니에요.',
+  already_canonical:   () => '이미 정식 줄이에요.',
+  broken_tree:         () => '줄 연결이 끊겨 있어요.',
+  invalid_status:      () => '잘못된 상태예요.',
+  line_not_found:      () => '줄을 찾을 수 없어요.',
 };
 
 export function errorText(err) {
@@ -177,3 +179,46 @@ export function errorText(err) {
   console.error(err);
   return `오류가 발생했어요 (${err?.code ?? err?.message ?? 'unknown'})`;
 }
+
+// ------------------------------------------------------------ 연문회 OS dialogs (confirm / prompt)
+
+// osDialog({ title, message, input: { value, label, multiline } | null, ok, cancel, danger })
+// -> Promise<true | false> for confirm, Promise<string | null> for prompt.
+export function osDialog({ title = '연문회 OS', message = '', input = null, ok = '확인', cancel = '취소', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const prevFocus = document.activeElement;
+    let field = null;
+    if (input) {
+      field = input.multiline
+        ? h('textarea', { class: 'field', rows: 3, value: input.value ?? '', 'aria-label': input.label ?? title })
+        : h('input', { type: input.type ?? 'text', class: 'field', value: input.value ?? '', 'aria-label': input.label ?? title });
+    }
+    const done = (v) => { modal.remove(); document.removeEventListener('keydown', onKey, true); prevFocus?.focus?.(); resolve(v); };
+    const okBtn = h('button', { type: 'button', class: `btn btn-primary${danger ? ' danger' : ''}`, onclick: () => done(field ? field.value : true) }, ok);
+    const cancelBtn = h('button', { type: 'button', class: 'btn', onclick: () => done(field ? null : false) }, cancel);
+    const titleId = `dlg-${Math.random().toString(36).slice(2)}`;
+    const box = h('div', { class: 'win is-active dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId },
+      h('div', { class: 'win-title' }, h('span', { class: 'win-title-pad' }), h('h2', { id: titleId }, title), h('span', { class: 'win-title-pad' })),
+      h('div', { class: 'dialog-body' },
+        message ? h('p', {}, message) : null,
+        field,
+        h('div', { class: 'btn-row', style: 'justify-content:flex-end' }, cancelBtn, okBtn)));
+    const modal = h('div', { class: 'modal', onclick: (e) => { if (e.target === modal) done(field ? null : false); } }, box);
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); done(field ? null : false); }
+      else if (e.key === 'Enter' && !e.isComposing && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); okBtn.click(); }
+      else if (e.key === 'Tab') {                          // keep focus inside the dialog
+        const f = [...box.querySelectorAll('button, input, textarea')];
+        const i = f.indexOf(document.activeElement);
+        if (e.shiftKey && i <= 0) { e.preventDefault(); f.at(-1).focus(); }
+        else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      }
+    }
+    document.addEventListener('keydown', onKey, true);
+    document.body.append(modal);
+    (field ?? okBtn).focus();
+    if (field?.select) field.select();
+  });
+}
+export const osConfirm = (message, opts = {}) => osDialog({ message, ...opts });
+export const osPrompt = (message, value = '', opts = {}) => osDialog({ ...opts, message, input: { value, ...(opts.input ?? {}) } });

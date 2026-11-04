@@ -9,6 +9,7 @@ import { rosterView } from './views/roster.js';
 import { guestbookView } from './views/guestbook.js';
 import { loginView } from './views/login.js';
 import { helpView } from './views/help.js';
+import { adminView, adminStoryView } from './views/admin.js';
 
 const desktop = $('#desktop');
 const menubar = $('#menubar');
@@ -45,6 +46,21 @@ const app = {
     if (target !== '/stories' && target !== '/login') openRoute(target);
     else updateNav('/stories');
   },
+  admin: false,
+  afterAdminLogin() {
+    app.admin = true;
+    if (!api.hasEntered()) api.setGuest();
+    wm.close('login');
+    $('.bootlog')?.remove();
+    renderMenubar();
+    openRoute('/stories', { silent: true });
+    app.go('/admin');
+  },
+  adminLost() {
+    app.admin = false;
+    for (const k of wm.keys()) if (k === 'admin' || k.startsWith('admin-story:')) wm.close(k);
+    renderMenubar();
+  },
 };
 
 const wm = createWM(desktop, { onActiveChange });
@@ -65,6 +81,9 @@ function currentRoute() { return decodeURIComponent(location.hash.replace(/^#/, 
 function resolve(route) {
   const m = route.match(/^\/story\/([0-9a-f-]{36})$/i);
   if (m) return [`story:${m[1].toLowerCase()}`, () => storyView(app, m[1].toLowerCase())];
+  const a = route.match(/^\/admin\/story\/([0-9a-f-]{36})$/i);
+  if (a && app.admin) return [`admin-story:${a[1].toLowerCase()}`, () => adminStoryView(app, a[1].toLowerCase())];
+  if (route === '/admin' && app.admin) return ['admin', () => adminView(app)];
   switch (route) {
     case '/new':       return ['new', () => newStoryView(app)];
     case '/roster':    return ['roster', () => rosterView(app)];
@@ -142,6 +161,7 @@ function renderMenubar() {
   menubar.replaceChildren(...[
     h('a', { class: 'logo', href: '#/stories', 'aria-label': '연문회 OS — 이야기 서랍' }, icon('logo', 16), h('span', {}, '연문회 OS')),
     h('button', { type: 'button', onclick: () => app.go('/help') }, '도움말'),
+    app.admin ? h('button', { type: 'button', onclick: () => app.go('/admin') }, '관리') : null,
     h('span', { class: 'spacer' }),
     presenceEl,
     api.hasEntered()
@@ -159,6 +179,12 @@ function logout() {
   forEachView(v => v.onFocus?.());
   showLogin();
 }
+
+async function adminLogout() {
+  await api.signOut().catch(() => {});
+  app.adminLost();
+}
+app.adminLogout = adminLogout;
 
 function renderNav() {
   iconsNav.replaceChildren(...NAV.map(n =>
@@ -190,6 +216,16 @@ renderNav();
 loadSettings();
 api.watch(['settings'], loadSettings);
 
+// An admin session (from the hidden login) survives reloads; check it before routing.
+async function checkAdmin() {
+  try {
+    if (!(await api.currentUser())) return;
+    app.admin = await Promise.race([api.isAdmin(), sleep(4000).then(() => false)]);
+  } catch { app.admin = false; }
+  if (app.admin) renderMenubar();
+}
+
+await checkAdmin();
 if (!api.hasEntered()) {
   const route = currentRoute();
   if (route !== '/stories' && route !== '/login') pending = route;

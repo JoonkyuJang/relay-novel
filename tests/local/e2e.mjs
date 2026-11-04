@@ -201,11 +201,11 @@ await step('writer reveal: 속성 window with name + student id, Escape closes',
   await w.locator('.who').first().hover();
   await b.locator('.props').waitFor();
   assert.match(await b.locator('.props').textContent(), /김철수.*2026100001/);
-  assert.equal(await w.locator('.line.is-revealed').count(), 1);
+  assert.equal(await w.locator('.line.is-revealed').count(), 1, 'reveal#1');
   await b.screenshot({ path: `${SHOTS}/04-reveal.png` });
   await b.mouse.move(5, 400);
   await b.locator('.props').waitFor({ state: 'detached' });
-  assert.equal(await w.locator('.line.is-revealed').count(), 0);
+  assert.equal(await w.locator('.line.is-revealed').count(), 0, 'reveal#2');
   // moving from the icon into the window keeps it open
   await w.locator('.who').nth(1).hover();
   await b.locator('.props').waitFor();
@@ -222,13 +222,13 @@ await step('writer reveal: 속성 window with name + student id, Escape closes',
   assert.equal(await b.locator('.props').count(), 1, 'pinned');
   // keyboard: Enter toggles
   await b.keyboard.press('Escape');
-  assert.equal(await b.locator('.props').count(), 0);
+  assert.equal(await b.locator('.props').count(), 0, 'reveal#3');
   await w.locator('.who').nth(2).focus();
   await b.keyboard.press('Enter');
   await b.locator('.props').waitFor();
   await b.keyboard.press('Escape');
-  assert.equal(await b.locator('.props').count(), 0);
-  assert.equal(await w.locator('.line.is-revealed').count(), 0);
+  assert.equal(await b.locator('.props').count(), 0, 'reveal#4');
+  assert.equal(await w.locator('.line.is-revealed').count(), 0, 'reveal#5');
 });
 
 await step('final-line warning and 완결 stamp', async () => {
@@ -382,28 +382,77 @@ await step('mobile first visit: boot + login fit on screen', async () => {
   await m.screenshot({ path: `${SHOTS}/11-mobile-login.png` });
 });
 
-await step('admin: conflict swap, guestbook hide, settings incl. guestbook', async () => {
+async function adminLogin(p) {
+  await p.goto(`${BASE}/`);
+  await p.waitForSelector('.win[data-key="login"]');
+  await p.fill('#lg-name', 'admin@test');
+  assert.equal(await p.getAttribute('#lg-sid', 'type'), 'password', 'easter egg: 학번 becomes a password field');
+  await p.fill('#lg-sid', 'pw');
+  await p.click('text=들어가기');
+  await p.waitForSelector('.win[data-key="admin"]');
+}
+
+await step('hidden admin login: wrong password is refused like a normal error', async () => {
+  const p = await newUser('x', null, { entered: false });
+  await p.goto(`${BASE}/`);
+  await p.waitForSelector('.win[data-key="login"]');
+  await p.fill('#lg-name', 'admin@test');
+  await p.fill('#lg-sid', 'nope');
+  await p.click('text=들어가기');
+  await p.waitForSelector('text=로그인 정보를 확인해 주세요');
+  assert.equal(await p.locator('.win[data-key="admin"]').count(), 0);
+  await p.fill('#lg-name', '보통 사람');
+  assert.equal(await p.getAttribute('#lg-sid', 'type'), 'text', 'back to a normal field');
+});
+
+await step('admin console: conflict swap via OS dialog, guestbook hide, settings, story window rewind', async () => {
   const p = await newUser('admin', null, { entered: false });
-  await p.goto(`${BASE}/admin.html`);
-  await p.fill('input[name=email]', 'admin@test');
-  await p.fill('input[name=password]', 'pw');
-  await p.click('#login button');
-  await p.waitForSelector('text=📙 conflict');
-  await p.click('text=Swap in, keep following');
-  await p.waitForSelector('text=No open conflicts.');
-  await p.click('nav button[data-tab=guestbook]');
-  await p.waitForSelector('td:has-text("우체통 이야기 결말")');
-  await p.click('#view button:has-text("Hide")');
-  await p.waitForSelector('text=Hidden.');
-  const pub = await pool.query(`select public.list_guestbook() as r`);
-  assert.equal(pub.rows[0].r.total, 0);
-  await p.click('nav button[data-tab=settings]');
-  await p.fill('input[name=guestbook_max_chars]', '150');
-  await p.click('#view button[type=submit]');
-  await p.waitForSelector('text=Settings saved.');
+  await adminLogin(p);
+  assert.match(await p.textContent('#menubar'), /관리/);
+  const c = win(p, 'admin');
+  await c.locator('text=바꿔 넣기 (뒤 줄 유지)').first().waitFor();
+  await p.screenshot({ path: `${SHOTS}/14-admin-console.png` });
+  await c.locator('text=바꿔 넣기 (뒤 줄 유지)').first().click();
+  await p.locator('.modal .dialog').waitFor();
+  await p.screenshot({ path: `${SHOTS}/15-admin-dialog.png` });
+  await p.locator('.modal >> text=확인').click();
+  await c.locator('text=바꿔 넣었어요').waitFor();
+  await c.locator('text=확인할 충돌이 없어요').waitFor();
+
+  await c.locator('.tabs >> text=방명록').click();
+  await c.locator('td:has-text("우체통 이야기 결말")').waitFor();
+  await c.locator('button:has-text("숨기기")').first().click();
+  await c.locator('text=숨겼어요').waitFor();
+  assert.equal((await pool.query(`select public.list_guestbook() as r`)).rows[0].r.total, 0, 'guestbook hidden');
+
+  await c.locator('.tabs >> text=설정').click();
+  await c.locator('input[name=guestbook_max_chars]').fill('150');
+  await c.locator('button:has-text("저장")').click();
+  await c.locator('text=설정을 저장했어요').waitFor();
   assert.equal((await pool.query(`select guestbook_max_chars from app.settings`)).rows[0].guestbook_max_chars, 150);
-  assert.equal(await p.locator('select[name=export_credits]').count(), 0, 'export setting removed');
-  await p.screenshot({ path: `${SHOTS}/12-admin.png`, fullPage: true });
+
+  await c.locator('.tabs >> text=이야기').click();
+  await c.locator(`a.rowlink:has-text("E2E 이야기")`).click();
+  const sw = win(p, `admin-story:${storyId}`);
+  await sw.locator('text=여기까지 되감기').first().waitFor();
+  await p.screenshot({ path: `${SHOTS}/16-admin-story.png` });
+  await sw.locator('text=여기까지 되감기').first().click();
+  await p.locator('.modal >> text=되감기').last().click();
+  await sw.locator('text=되감았어요').waitFor();
+  assert.equal((await pool.query(`select line_count from app.stories where id = $1`, [storyId])).rows[0].line_count, 1, 'rewound');
+
+  // edit via prompt dialog
+  await sw.locator('button:has-text("수정")').first().click();
+  await p.locator('.modal textarea').fill('고친 첫 줄');
+  await p.locator('.modal >> text=확인').click();
+  await sw.locator('text=고쳤어요').waitFor();
+
+  // session survives a reload, #/admin reopens the console; admin.html redirects there
+  await p.goto(`${BASE}/admin.html`);
+  await win(p, 'admin').waitFor();
+  await win(p, 'admin').locator('text=관리자 나가기').click();
+  await win(p, 'admin').waitFor({ state: 'detached' });
+  assert.ok(!/관리/.test(await p.textContent('#menubar')), 'admin menu gone');
 });
 
 await step('old links: story.html?id= and export.html redirect into 연문회 OS', async () => {
@@ -418,11 +467,7 @@ await step('old links: story.html?id= and export.html redirect into 연문회 OS
 await step('remote self-test page passes against local DB (as admin, cleans up)', async () => {
   await pool.query(`update app.settings set max_lines = 20`);
   const p = await newUser('tester', null, { entered: false });
-  await p.goto(`${BASE}/admin.html`);
-  await p.fill('input[name=email]', 'admin@test');
-  await p.fill('input[name=password]', 'pw');
-  await p.click('#login button');
-  await p.waitForSelector('#app:not([hidden])');
+  await adminLogin(p);
   await p.goto(`${BASE}/tests/remote/`);
   await p.click('#run');
   await p.waitForFunction(() => /ALL PASSED|FAILED|ERROR/.test(document.querySelector('#out').textContent), null, { timeout: 60000 });

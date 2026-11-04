@@ -30,7 +30,7 @@ Static frontend on GitHub Pages + a Supabase (Postgres) backend.
 ```
 index.html                          연문회 OS (single page: boot → login → windows; routes #/stories, #/story/<id>,
                                     #/new, #/roster, #/guestbook, #/help)
-admin.html                          admin console (English)
+admin.html                          redirect to #/admin (the console is a 연문회 OS window, js/views/admin.js)
 story.html, export.html             redirects for old links
 css/base.css                        the whole visual system (tokens, windows, mobile layout, CRT)
 fonts/                              Neo둥근모 + 갈무리11 (subset), OFL — see fonts/README.md
@@ -60,8 +60,15 @@ sent with each write. "둘러보기" lets people read without logging in.
    ```
 3. **GitHub → Settings → Pages**: deploy from branch `main`, folder `/ (root)`.
    The site is then at `https://joonkyujang.github.io/relay-novel/`.
-4. Open `…/relay-novel/tests/remote/` (logged in on `admin.html` first) and run
+4. Open `…/relay-novel/tests/remote/` (logged in as admin first) and run
    the concurrency self-test.
+
+## Admin
+
+There is no visible admin button. On the 연문회 OS login window, type the admin **email in 이름**
+(the 학번 field turns into a password field) and the **password in 학번**, then 들어가기.
+A wrong password shows the same message as any other login problem. The 관리 menu and the
+관리자 콘솔 window appear; 관리자 나가기 inside the console signs out.
 
 ## Changing the database
 

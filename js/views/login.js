@@ -4,8 +4,20 @@ import { h, icon, errorText } from '../ui.js';
 
 export function loginView(app, { reason = '' } = {}) {
   const saved = { name: api.prefs.get('lastName', ''), sid: api.prefs.get('lastSid', '') };
-  const name = h('input', { type: 'text', class: 'field', id: 'lg-name', autocomplete: 'name', maxlength: 20, value: saved.name, required: true });
-  const sid = h('input', { type: 'text', class: 'field', id: 'lg-sid', autocomplete: 'off', inputmode: 'numeric', maxlength: 24, value: saved.sid, required: true });
+  const name = h('input', { type: 'text', class: 'field', id: 'lg-name', autocomplete: 'name', maxlength: 80, value: saved.name, required: true });
+  const sid = h('input', { type: 'text', class: 'field', id: 'lg-sid', autocomplete: 'off', inputmode: 'numeric', maxlength: 128, value: saved.sid, required: true });
+  // Hidden door: an email in 이름 turns 학번 into a password field and logs in as admin.
+  const isDoor = () => name.value.includes('@');
+  function syncDoor() {
+    const door = isDoor();
+    if ((sid.type === 'password') === door) return;
+    sid.type = door ? 'password' : 'text';
+    sid.value = door ? '' : api.prefs.get('lastSid', '');
+    sid.setAttribute('autocomplete', door ? 'current-password' : 'off');
+    name.setAttribute('autocomplete', door ? 'username' : 'name');
+    if (door) sid.removeAttribute('inputmode'); else sid.setAttribute('inputmode', 'numeric');
+  }
+  name.addEventListener('input', syncDoor);
   const msg = h('div', { role: 'alert' }, reason ? h('div', { class: 'notice warn' }, reason) : null);
   const crtOn = h('button', { type: 'button', 'aria-pressed': String(app.crt), onclick: () => setCrt(true) }, '켬');
   const crtOff = h('button', { type: 'button', 'aria-pressed': String(!app.crt), onclick: () => setCrt(false) }, '끔');
@@ -28,8 +40,23 @@ export function loginView(app, { reason = '' } = {}) {
       h('button', { type: 'button', class: 'btn', onclick: () => { api.setGuest(); app.afterLogin(); } }, '둘러보기 (읽기만)'),
       h('button', { type: 'submit', class: 'btn btn-primary' }, '들어가기')));
 
-  form.addEventListener('submit', (e) => {
+  let busy = false;
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (busy) return;
+    if (isDoor()) {
+      busy = true;
+      try {
+        await api.signIn(name.value.trim(), sid.value);
+        if (!(await api.isAdmin())) { await api.signOut(); throw new api.ApiError('login_failed'); }
+        sid.value = '';
+        app.afterAdminLogin();
+      } catch {
+        msg.replaceChildren(h('div', { class: 'notice bad' }, errorText({ code: 'login_failed' })));
+        sid.value = ''; sid.focus();
+      } finally { busy = false; }
+      return;
+    }
     const ident = { name: api.cleanName(name.value), studentId: api.cleanStudentId(sid.value) };
     const problem = api.identityProblem(ident);
     if (problem) {

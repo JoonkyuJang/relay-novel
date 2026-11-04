@@ -1,40 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Relay Novel Admin</title>
   <meta name="robots" content="noindex">
-  <link rel="stylesheet" href="css/base.css">
-  <script src="js/vendor/supabase-js-2.117.3.umd.js"></script>
-  <script type="module" src="js/admin.js"></script>
+  <title>연문회 릴레이 소설</title>
+  <script>location.replace('./#/admin');</script>
 </head>
-<body class="page">
-  <p><a href="./">← 연문회 OS</a></p>
-  <h1>연문회 OS · Admin</h1>
-  <div id="notice"></div>
-
-  <form id="login" class="box" hidden>
-    <label>Email <input type="email" name="email" autocomplete="username" required></label>
-    <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
-    <div class="row"><button type="submit">Log in</button><span id="loginMsg"></span></div>
-  </form>
-
-  <div id="app" hidden>
-    <div class="row">
-      <span id="who" class="muted"></span>
-      <button id="logout">Log out</button>
-      <button id="export">Backup (JSON)</button>
-    </div>
-    <nav class="tabs row" style="margin-top:12px">
-      <button data-tab="conflicts">Conflicts</button>
-      <button data-tab="stories">Stories</button>
-      <button data-tab="settings">Settings</button>
-      <button data-tab="guestbook">방명록</button>
-      <button data-tab="stats">Contributors</button>
-      <button data-tab="log">Log</button>
-    </nav>
-    <section id="view"></section>
-  </div>
-</body>
+<body><a href="./">연문회 릴레이 소설로 가기</a></body>
 </html>
