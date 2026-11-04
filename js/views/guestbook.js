@@ -1,6 +1,6 @@
 // 방명록: free messages, writer hidden behind the same 속성 window.
 import * as api from '../api.js';
-import { h, icon, fmtTime, errorText, toggleProps } from '../ui.js';
+import { h, icon, fmtTime, errorText, attachReveal } from '../ui.js';
 
 const pad3 = (n) => String(n).padStart(3, '0');
 
@@ -52,13 +52,13 @@ export function guestbookView(app) {
     const el = h('article', { class: `note${revealedId === g.id ? ' is-revealed' : ''}` });
     const btn = h('button', {
       type: 'button', class: 'who', 'aria-label': `#${pad3(g.no)} 남긴 사람 보기`, 'aria-expanded': 'false',
-      onclick: () => {
-        toggleProps(btn, `#${pad3(g.no)} 속성`, [
-          ['작성자', g.author_name], ['학번', g.student_id], ['남긴 시각', fmtTime(g.created_at)],
-        ], () => { revealedId = null; notes.querySelector('.is-revealed')?.classList.remove('is-revealed'); });
-        if (btn.getAttribute('aria-expanded') === 'true') { revealedId = g.id; el.classList.add('is-revealed'); }
-      },
     }, icon('person', 16));
+    attachReveal(btn, () => ({
+      title: `#${pad3(g.no)} 속성`,
+      rows: [['작성자', g.author_name], ['학번', g.student_id], ['남긴 시각', fmtTime(g.created_at)]],
+      onOpen: () => { revealedId = g.id; el.classList.add('is-revealed'); },
+      onClose: () => { revealedId = null; notes.querySelector('.is-revealed')?.classList.remove('is-revealed'); },
+    }));
     el.append(
       h('div', { class: 'note-meta' }, h('span', {}, `#${pad3(g.no)}`), h('span', {}, fmtTime(g.created_at)), h('span', { class: 'spacer' }), btn),
       h('div', { class: 'note-text' }, g.text));

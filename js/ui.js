@@ -64,10 +64,13 @@ export function relTime(ts, now = Date.now()) {
 
 // ------------------------------------------------------------ properties popup (desktop) / sheet (phone)
 
-let openProps = null;
+let openProps = null;        // { el, anchor, onClose, pinned }
+let hoverTimer = null;
 const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
+const canHover = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches && !isPhone();
 
 export function closeProps() {
+  clearTimeout(hoverTimer);
   if (!openProps) return;
   const { el, anchor, onClose } = openProps;
   openProps = null;
@@ -84,14 +87,12 @@ function outside(e) {
 }
 function onEsc(e) { if (e.key === 'Escape') { const a = openProps?.anchor; closeProps(); a?.focus(); } }
 
-// Toggle a small "속성" window for `anchor`. rows: [[label, value], …]
-export function toggleProps(anchor, title, rows, onClose) {
-  if (openProps?.anchor === anchor) { closeProps(); return; }
+function showProps(anchor, spec, pinned) {
   closeProps();
   const phone = isPhone();
-  const el = h('div', { class: `props${phone ? ' sheet' : ''}`, role: 'dialog', 'aria-label': title },
-    h('div', { class: 'props-title stripes' }, h('span', {}, title)),
-    h('dl', {}, rows.filter(r => r[1] != null && r[1] !== '').map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])));
+  const el = h('div', { class: `props${phone ? ' sheet' : ''}`, role: 'dialog', 'aria-label': spec.title },
+    h('div', { class: 'props-title stripes' }, h('span', {}, spec.title)),
+    h('dl', {}, spec.rows.filter(r => r[1] != null && r[1] !== '').map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])));
   document.body.append(el);
   if (!phone) {
     const r = anchor.getBoundingClientRect();
@@ -101,11 +102,42 @@ export function toggleProps(anchor, title, rows, onClose) {
     if (top + ht > innerHeight - 8) top = Math.max(36, innerHeight - ht - 8);
     el.style.left = `${left}px`; el.style.top = `${top}px`;
   }
+  el.addEventListener('pointerenter', () => clearTimeout(hoverTimer));
+  el.addEventListener('pointerleave', () => scheduleClose());
   anchor.setAttribute('aria-expanded', 'true');
-  openProps = { el, anchor, onClose };
+  openProps = { el, anchor, onClose: spec.onClose, pinned };
+  spec.onOpen?.();
   setTimeout(() => {
     document.addEventListener('pointerdown', outside, true);
     document.addEventListener('keydown', onEsc, true);
+  });
+}
+function scheduleClose() {
+  clearTimeout(hoverTimer);
+  if (openProps && !openProps.pinned) hoverTimer = setTimeout(closeProps, 180);
+}
+
+// Writer reveal for `anchor`: hover shows it on desktop (click pins it); tap/click/Enter
+// toggles it everywhere. getSpec() -> { title, rows: [[label, value]], onOpen?, onClose? }
+export function attachReveal(anchor, getSpec) {
+  anchor.addEventListener('click', () => {
+    clearTimeout(hoverTimer);
+    if (openProps?.anchor === anchor) {
+      if (!openProps.pinned && canHover()) { openProps.pinned = true; return; }   // hovered -> pin
+      closeProps(); return;
+    }
+    showProps(anchor, getSpec(), true);
+  });
+  anchor.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'mouse' || !canHover()) return;
+    clearTimeout(hoverTimer);
+    if (openProps?.anchor === anchor) return;
+    if (openProps?.pinned) return;               // don't replace a pinned window on fly-over
+    hoverTimer = setTimeout(() => { if (openProps?.anchor !== anchor) showProps(anchor, getSpec(), false); }, 60);
+  });
+  anchor.addEventListener('pointerleave', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    if (openProps?.anchor === anchor) scheduleClose(); else clearTimeout(hoverTimer);
   });
 }
 

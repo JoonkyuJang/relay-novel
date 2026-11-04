@@ -197,11 +197,35 @@ await step('writer reveal: 속성 window with name + student id, Escape closes',
   const w = win(b, `story:${storyId}`);
   await w.locator('.line').first().waitFor();
   assert.ok(!(await w.textContent()).includes('김철수'));
-  await w.locator('.who').first().click();
+  // desktop: hover shows, leaving hides
+  await w.locator('.who').first().hover();
   await b.locator('.props').waitFor();
   assert.match(await b.locator('.props').textContent(), /김철수.*2026100001/);
   assert.equal(await w.locator('.line.is-revealed').count(), 1);
   await b.screenshot({ path: `${SHOTS}/04-reveal.png` });
+  await b.mouse.move(5, 400);
+  await b.locator('.props').waitFor({ state: 'detached' });
+  assert.equal(await w.locator('.line.is-revealed').count(), 0);
+  // moving from the icon into the window keeps it open
+  await w.locator('.who').nth(1).hover();
+  await b.locator('.props').waitFor();
+  const pb = await b.locator('.props').boundingBox();
+  await b.mouse.move(pb.x + 20, pb.y + 30, { steps: 4 });
+  await b.waitForTimeout(400);
+  assert.equal(await b.locator('.props').count(), 1, 'stays open while pointer is on it');
+  await b.mouse.move(5, 400);
+  await b.locator('.props').waitFor({ state: 'detached' });
+  // click pins it
+  await w.locator('.who').first().click();
+  await b.mouse.move(5, 400);
+  await b.waitForTimeout(400);
+  assert.equal(await b.locator('.props').count(), 1, 'pinned');
+  // keyboard: Enter toggles
+  await b.keyboard.press('Escape');
+  assert.equal(await b.locator('.props').count(), 0);
+  await w.locator('.who').nth(2).focus();
+  await b.keyboard.press('Enter');
+  await b.locator('.props').waitFor();
   await b.keyboard.press('Escape');
   assert.equal(await b.locator('.props').count(), 0);
   assert.equal(await w.locator('.line.is-revealed').count(), 0);

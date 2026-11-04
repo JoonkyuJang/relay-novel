@@ -1,6 +1,6 @@
 // One story: its lines, the writer reveal, and the baton/composer state machine.
 import * as api from '../api.js';
-import { h, icon, fmtTime, fmtCountdown, errorText, toggleProps } from '../ui.js';
+import { h, icon, fmtTime, fmtCountdown, errorText, attachReveal } from '../ui.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const STATUS_CHIP = {
@@ -74,13 +74,13 @@ export function storyView(app, storyId) {
     const li = h('li', { class: `line${isNew ? ' is-new' : ''}${revealedId === l.id ? ' is-revealed' : ''}` });
     const who = h('button', {
       type: 'button', class: 'who', 'aria-label': `${l.position}번 줄 쓴 사람 보기`, 'aria-expanded': 'false',
-      onclick: () => {
-        toggleProps(who, `${pad2(l.position)}번 줄 속성`, [
-          ['작성자', l.author_name], ['학번', l.student_id], ['쓴 시각', fmtTime(l.created_at)],
-        ], () => { revealedId = null; list.querySelector('.is-revealed')?.classList.remove('is-revealed'); });
-        if (who.getAttribute('aria-expanded') === 'true') { revealedId = l.id; li.classList.add('is-revealed'); }
-      },
     }, icon('person', 16));
+    attachReveal(who, () => ({
+      title: `${pad2(l.position)}번 줄 속성`,
+      rows: [['작성자', l.author_name], ['학번', l.student_id], ['쓴 시각', fmtTime(l.created_at)]],
+      onOpen: () => { revealedId = l.id; li.classList.add('is-revealed'); },
+      onClose: () => { revealedId = null; list.querySelector('.is-revealed')?.classList.remove('is-revealed'); },
+    }));
     li.append(
       h('span', { class: 'line-no' }, pad2(l.position)),
       h('span', { class: 'line-text' }, l.text, l.edited ? h('span', { class: 'edited' }, ' (수정됨)') : null),
