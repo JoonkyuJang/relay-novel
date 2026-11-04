@@ -175,6 +175,7 @@ function renderMenubar() {
 
 function logout() {
   api.logout();
+  if (app.admin) { app.admin = false; api.signOut().catch(() => {}); }   // one 로그아웃 ends everything
   pending = null;
   for (const k of wm.keys()) wm.close(k);      // also releases any reserved turn
   history.replaceState(null, '', location.pathname + location.search);

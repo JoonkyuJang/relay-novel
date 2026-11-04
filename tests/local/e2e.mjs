@@ -470,6 +470,26 @@ await step('admin console: conflict swap via OS dialog, guestbook hide, settings
   await win(p, 'admin').locator('text=관리자 나가기').click();
   await win(p, 'admin').waitFor({ state: 'detached' });
   assert.ok(!/관리/.test(await p.textContent('#menubar')), 'admin menu gone');
+
+  // the normal 로그아웃 also ends the admin session, even after a reload
+  await p.click('#menubar >> text=로그인');
+  await p.fill('#lg-name', 'admin@test');
+  await p.fill('#lg-sid', 'pw');
+  await p.click('.win[data-key="login"] >> text=들어가기');
+  await win(p, 'admin').waitFor();
+  await p.click('#menubar >> text=로그인');
+  await p.fill('#lg-name', '관리자 본인');
+  await p.fill('#lg-sid', '2026100099');
+  await p.click('.win[data-key="login"] >> text=들어가기');
+  await p.click('#menubar >> text=로그아웃');
+  await p.waitForSelector('.win[data-key="login"]');
+  await p.waitForFunction(() => !Object.keys(localStorage).some(k => k.startsWith('sb-') && k.endsWith('-auth-token')));
+  await p.goto(`${BASE}/#/admin`);
+  await p.waitForSelector('.win[data-key="login"]');
+  await p.click('text=둘러보기 (읽기만)');
+  await win(p, 'stories').waitFor();
+  assert.equal(await win(p, 'admin').count(), 0, 'no console without the admin login');
+  assert.ok(!/관리/.test(await p.textContent('#menubar')));
 });
 
 await step('old links: story.html?id= and export.html redirect into 연문회 OS', async () => {
