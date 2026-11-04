@@ -327,6 +327,23 @@ await step('desktop windows: drag, position remembered, focus order, close', asy
   await b.screenshot({ path: `${SHOTS}/13-desktop-dragged.png` });
 });
 
+await step('log out closes every window and returns to the login screen', async () => {
+  const b = await newUser('이영희', '2026100002');
+  await b.goto(`${BASE}/#/guestbook`);
+  await win(b, 'guestbook').waitFor();
+  await b.click('.icon[data-route="/roster"]');
+  await win(b, 'roster').waitFor();
+  await b.click('#menubar >> text=로그아웃');
+  await b.waitForSelector('.win[data-key="login"]');
+  assert.deepEqual(await b.$$eval('.win', ws => ws.map(w => w.dataset.key)), ['login']);
+  assert.ok(!b.url().includes('#/'), 'route cleared');
+  await b.fill('#lg-name', '다른 사람');
+  await b.fill('#lg-sid', '2026100077');
+  await b.click('text=들어가기');
+  await win(b, 'stories').waitFor();
+  assert.match(await b.textContent('#menubar'), /다른 사람 님/);
+});
+
 await step('CRT: switch on login screen and in the menu bar, remembered', async () => {
   const p = await newUser('crt', null, { entered: false });
   await p.goto(`${BASE}/`);

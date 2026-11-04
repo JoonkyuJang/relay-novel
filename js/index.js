@@ -175,8 +175,10 @@ function renderMenubar() {
 
 function logout() {
   api.logout();
+  pending = null;
+  for (const k of wm.keys()) wm.close(k);      // also releases any reserved turn
+  history.replaceState(null, '', location.pathname + location.search);
   renderMenubar();
-  forEachView(v => v.onFocus?.());
   showLogin();
 }
 
