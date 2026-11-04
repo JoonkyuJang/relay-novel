@@ -18,7 +18,9 @@ export function injectStampDefs() {
   injected = true;
   const t = document.createElement('template');
   t.innerHTML = STAMP_DEFS;
-  document.body.prepend(t.content.firstChild);
+  const svg = t.content.firstChild;
+  svg.setAttribute('class', 'stamp-defs');           // kept when printing (the seal uses it)
+  document.body.prepend(svg);
 }
 
 // <svg><use href="#rn-m-sun"/></svg>

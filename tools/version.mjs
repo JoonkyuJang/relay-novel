@@ -24,6 +24,8 @@ function walk(dir) {
 }
 const modules = walk(path.join(ROOT, 'js')).map(rel).filter(p => p !== 'js/index.js' && p !== 'js/config.example.js').sort();
 const styles = ['css/fonts.css', 'css/base.css', 'css/extras.css'];
+// loaded on demand with import() — in the import map, but not preloaded for everyone
+const LAZY = new Set(['js/views/admin.js']);
 
 const imports = Object.fromEntries(modules.map(p => [`./${p}`, `./${v(p)}`]));
 const block = [
@@ -35,7 +37,7 @@ const block = [
   '  </script>',
   `  <script type="module" src="${v('js/index.js')}"></script>`,
   '  <!-- fetch every module at once instead of one import level at a time -->',
-  ...modules.map(p => `  <link rel="modulepreload" href="${v(p)}">`),
+  ...modules.filter(p => !LAZY.has(p)).map(p => `  <link rel="modulepreload" href="${v(p)}">`),
   '  <!-- assets:end -->',
 ].join('\n');
 

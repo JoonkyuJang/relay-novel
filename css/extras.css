@@ -364,3 +364,41 @@ body.amber .grid-cells, body.amber .grid-cells span { border-color: #5E3F00; }
 .win:focus { outline: none; }
 .compose-hint { display: block; font-size: 11px; margin-top: -2px; }
 .menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 9em; }
+
+/* ------------------------------------------------------------ 원고지로 인쇄 */
+
+.print-sheets { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 12mm 15mm; }
+  body.printing { background: #fff !important; }
+  body.printing > :not(.print-sheets):not(.stamp-defs) { display: none !important; }
+  body.printing::after { display: none !important; }                 /* no CRT lines on paper */
+  body.printing .print-sheets { display: block; color: #1D2A44; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .ms-sheet { position: relative; break-inside: avoid; margin: 0 0 8mm; padding: 4mm 0 0; }
+  .ms-sheet:nth-child(2n) { break-after: page; }
+  .ms-grid { border: 0.5mm solid #D86F55; padding: 1.5mm; display: flex; flex-direction: column; gap: 2.4mm; }
+  .ms-row { display: grid; grid-template-columns: repeat(20, 1fr); border-top: 0.25mm solid #E9A08C; border-bottom: 0.25mm solid #E9A08C; }
+  .ms-cell { height: 8.4mm; border-left: 0.25mm solid #E9A08C; display: flex; align-items: center; justify-content: center;
+    font-family: "Nanum Myeongjo", "AppleMyungjo", "Batang", "Noto Serif KR", serif; font-size: 5.2mm; line-height: 1; }
+  .ms-cell:last-child { border-right: 0.25mm solid #E9A08C; }
+  .ms-cell.two { font-size: 4mm; letter-spacing: -0.2mm; }
+  .ms-foot { display: flex; justify-content: space-between; font: 2.8mm/1.4 "Galmuri11", sans-serif; color: #A0563F; margin-top: 1.5mm; }
+  .ms-seal { position: absolute; right: 4mm; bottom: 9mm; opacity: 0.9; }
+}
+
+/* ------------------------------------------------------------ 내가 쓴 줄 */
+
+.mine { padding: 6px 0 14px; }
+.mine-story { padding: 10px 16px 4px; border-bottom: 1px dashed var(--rule); }
+.mine-story h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13px; }
+.mine-story h3 a { color: inherit; }
+.mine-lines { list-style: none; margin: 0; padding: 0; }
+.mine-lines li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 6px; align-items: start; padding: 3px 0; }
+.mine-lines .line-no { padding-top: 6px; padding-right: 6px; }
+.mine-meta { display: flex; align-items: center; gap: 6px; padding-top: 5px; font-size: 11px; }
+.mine-meta .tot { display: inline-flex; align-items: center; gap: 2px; }
+button.menu-name { font: inherit; color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+@media (max-width: 767px) {
+  .mine-lines li { grid-template-columns: 26px minmax(0, 1fr); }
+  .mine-meta { grid-column: 2; padding-top: 0; }
+}

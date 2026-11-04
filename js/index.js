@@ -9,8 +9,9 @@ import { rosterView } from './views/roster.js';
 import { guestbookView } from './views/guestbook.js';
 import { loginView } from './views/login.js';
 import { helpView } from './views/help.js';
-import { adminView, adminStoryView } from './views/admin.js';
 import { readingView } from './views/reading.js';
+import { mineView } from './views/mine.js';
+import { initReports } from './extras/report.js';
 import { setExtras, on, bus } from './extras/extras.js';
 import { initDayNight, phaseButton } from './extras/daynight.js';
 import { initDesk, deadlineEl, soundButton, memoView, aboutView } from './extras/desk.js';
@@ -18,6 +19,8 @@ import { initCat } from './extras/cat.js';
 import { initSaver } from './extras/saver.js';
 import { initFun } from './extras/fun.js';
 import { injectStampDefs } from './extras/stamps.js';
+
+initReports();                                   // crash reports first, so startup errors are caught too
 
 const desktop = $('#desktop');
 const menubar = $('#menubar');
@@ -104,9 +107,14 @@ function resolve(route) {
   if (r && on('reading')) return [`read:${r[1].toLowerCase()}`, () => readingView(app, r[1].toLowerCase())];
   if (route === '/memo' && on('memo')) return ['memo', () => memoView(app)];
   if (route === '/about' && on('about')) return ['about', () => aboutView(app)];
+  if (route === '/mine' && on('my_lines')) return ['mine', () => mineView(app)];
   const a = route.match(/^\/admin\/story\/([0-9a-f-]{36})$/i);
-  if (a && app.admin) return [`admin-story:${a[1].toLowerCase()}`, () => adminStoryView(app, a[1].toLowerCase())];
-  if (route === '/admin' && app.admin) return ['admin', () => adminView(app)];
+  if (a && app.admin) return [`admin-story:${a[1].toLowerCase()}`, () => lazyView(
+    { type: 'admin-story', route, title: '관리 · 이야기', size: { w: 960, h: 600 }, minSize: { w: 720, h: 400 }, origin: { x: 120, y: 60 } },
+    () => import('./views/admin.js').then(m => m.adminStoryView(app, a[1].toLowerCase())))];
+  if (route === '/admin' && app.admin) return ['admin', () => lazyView(
+    { type: 'admin', route: '/admin', title: '관리자 콘솔', size: { w: 920, h: 620 }, minSize: { w: 640, h: 400 }, origin: { x: 60, y: 30 } },
+    () => import('./views/admin.js').then(m => m.adminView(app)))];
   switch (route) {
     case '/new':       return ['new', () => newStoryView(app)];
     case '/roster':    return ['roster', () => rosterView(app)];
@@ -114,6 +122,30 @@ function resolve(route) {
     case '/help':      return ['help', () => helpView(app)];
     default:           return ['stories', () => storiesView(app)];
   }
+}
+
+// A window whose code loads on first open (the admin console: only admins ever need it).
+function lazyView(meta, make) {
+  const holder = h('div', { class: 'win-scroll' }, h('p', { class: 'muted', style: 'padding:16px;margin:0' }, '불러오는 중…'));
+  const body = document.createDocumentFragment();
+  body.append(holder);
+  let real = null, closed = false;
+  const view = {
+    ...meta, body,
+    mount() {
+      make().then((r) => {
+        if (closed) return;
+        real = r;
+        real.setTitle = view.setTitle;
+        holder.replaceWith(r.body);
+        r.mount?.();
+      }).catch(() => { holder.firstChild.textContent = '불러오지 못했어요. 새로고침해 주세요.'; });
+    },
+    unmount() { closed = true; real?.unmount?.(); },
+    onFocus() { real?.onFocus?.(); },
+    onSettings() { real?.onSettings?.(); },
+  };
+  return view;
 }
 
 function openRoute(route, opts) {
@@ -199,7 +231,7 @@ function renderMenubar() {
     presenceEl,
     api.hasEntered()
       ? ident
-        ? [h('span', { class: 'menu-name' }, `${ident.name} 님`), h('button', { type: 'button', onclick: logout }, '로그아웃')]
+        ? [on('my_lines') ? h('button', { type: 'button', class: 'menu-name', title: '내가 쓴 줄', onclick: () => app.go('/mine') }, `${ident.name} 님`) : h('span', { class: 'menu-name' }, `${ident.name} 님`), h('button', { type: 'button', onclick: logout }, '로그아웃')]
         : [h('span', { class: 'muted' }, '손님'), h('button', { type: 'button', onclick: () => app.requireLogin('', currentRoute()) }, '로그인')]
       : null,
     soundButton(renderMenubar),

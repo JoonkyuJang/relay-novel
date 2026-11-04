@@ -731,8 +731,9 @@ await step('관리 · 부가 기능: inner tabs save switches and the deadline',
   const w = win(p, 'admin');
   await w.locator('.tabs >> text=부가 기능').click();
   await w.locator('.extra-tabs >> text=고양이').click();
-  await w.locator('.extra-row >> text=이름').waitFor();
-  const name = w.locator('.extra-row:has-text("이름") input');
+  const nameRow = w.locator('.extra-row', { hasText: '마우스를 올리면 보여요' });
+  await nameRow.waitFor();
+  const name = nameRow.locator('input');
   await name.fill('백냥이');
   await name.press('Tab');
   await w.locator('text=이름 저장했어요').waitFor();
@@ -860,6 +861,76 @@ await step('why you cannot write is shown before pressing 이어 쓰기 (own lim
   assert.ok(await win(q, 'new').locator('button[type=submit]').isDisabled());
   await q.waitForFunction(() => /마감됐어요/.test(document.querySelector('.menubar .deadline')?.textContent ?? ''));
   await pool.query(`update app.settings set extras = extras - 'deadline_closes' - 'deadline'`);
+});
+
+await step('내가 쓴 줄 from my name; 원고지로 인쇄; crash reports reach 관리 · 기록', async () => {
+  const id = await finishedStory('원고지 이야기');
+  // 작가2 wrote line 2 of every finishedStory (see the helper)
+  const p = await newUser('작가2', '20268002');
+  await p.goto(`${BASE}/#/story/${id}`);
+  const w = win(p, `story:${id}`);
+  await w.locator('.story-head h3').waitFor();
+  // 원고지: stub the print dialog, then look at the sheets the page laid out
+  await p.evaluate(() => { window.print = () => { window.__printed = (window.__printed ?? 0) + 1; }; });
+  await w.locator('button:text-is("원고지로 인쇄")').click();
+  await p.waitForFunction(() => window.__printed === 1);
+  const sheet = await p.evaluate(() => ({
+    sheets: document.querySelectorAll('.print-sheets .ms-sheet').length,
+    cells: document.querySelectorAll('.print-sheets .ms-sheet:first-child .ms-cell').length,
+    text: [...document.querySelectorAll('.print-sheets .ms-cell')].map(c => c.textContent).join(''),
+    seal: !!document.querySelector('.print-sheets .ms-seal svg'),
+  }));
+  assert.equal(sheet.cells, 200, 'a 200자 원고지 sheet');
+  assert.ok(sheet.sheets >= 1 && sheet.seal);
+  assert.match(sheet.text, /원고지이야기/); assert.match(sheet.text, /두번째,이어서써요\./);
+  await p.emulateMedia({ media: 'print' });
+  await p.screenshot({ path: `${SHOTS}/35-print-sheet.png`, fullPage: true });
+  await p.emulateMedia({ media: 'screen' });
+  await p.evaluate(() => dispatchEvent(new Event('afterprint')));
+  assert.equal(await p.locator('.print-sheets').count(), 0, 'cleaned up after printing');
+  // 내가 쓴 줄
+  await p.locator('.menubar .menu-name').click();
+  const m = win(p, 'mine');
+  await m.locator('.mine-lines li', { hasText: '두 번째, 이어서 써요.' }).first().waitFor();
+  assert.match(await m.locator('.win-bar').textContent(), /줄 \d+개 · 이야기 \d+편/);
+  await p.screenshot({ path: `${SHOTS}/36-mine.png` });
+  // crash report
+  await pool.query('delete from app.client_errors');
+  await p.evaluate(() => setTimeout(() => { throw new Error('e2e boom'); }));
+  await p.waitForTimeout(800);
+  const r = (await pool.query(`select message, source, version from app.client_errors`)).rows;
+  assert.equal(r.length, 1); assert.match(r[0].message, /e2e boom/); assert.ok(r[0].version, 'tagged with the deployed version');
+  errors.splice(errors.findIndex(e => e.includes('e2e boom')), 1);          // that one was on purpose
+});
+
+// Accessibility: axe-core on the main screens; serious / critical WCAG A+AA problems fail the run.
+const AXE = fs.readFileSync(new URL('./node_modules/axe-core/axe.min.js', import.meta.url), 'utf8');
+async function axe(p, label) {
+  await p.addScriptTag({ content: AXE });
+  const r = await p.evaluate(async () => (await window.axe.run(document, {
+    runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+  })).violations.filter(v => ['serious', 'critical'].includes(v.impact))
+    .map(v => `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' | ')}${v.nodes.length > 3 ? ` +${v.nodes.length - 3}` : ''}`));
+  return r.map(x => `[${label}] ${x}`);
+}
+
+await step('accessibility: no serious axe-core problems on the main screens (desktop + phone)', async () => {
+  const found = [];
+  const g = await newUser('a11y', null, { entered: false });
+  await g.goto(`${BASE}/`); await g.waitForSelector('.win[data-key="login"]'); await g.waitForTimeout(400);
+  found.push(...await axe(g, 'login'));
+  const id = await finishedStory('접근성 이야기');
+  const p = await newUser('접근성', '2026100811');
+  await p.goto(`${BASE}/#/story/${id}`); await win(p, `story:${id}`).locator('.story-head h3').waitFor(); await p.waitForTimeout(400);
+  found.push(...await axe(p, 'finished story + drawer'));
+  await p.goto(`${BASE}/#/help`); await win(p, 'help').waitFor(); found.push(...await axe(p, 'help'));
+  await p.goto(`${BASE}/#/mine`); await win(p, 'mine').waitFor(); found.push(...await axe(p, 'mine'));
+  await p.goto(`${BASE}/#/guestbook`); await win(p, 'guestbook').waitFor(); found.push(...await axe(p, 'guestbook'));
+  const m = await newUser('폰접근성', '2026100812', { mobile: true });
+  await m.goto(`${BASE}/#/story/${id}`); await win(m, `story:${id}`).locator('.story-head h3').waitFor(); await m.waitForTimeout(400);
+  found.push(...await axe(m, 'phone story'));
+  if (found.length) console.log(found.join('\n'));
+  assert.deepEqual(found, []);
 });
 
 await step('versioned files: every module and stylesheet loads once, with its ?v= hash', async () => {

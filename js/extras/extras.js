@@ -10,6 +10,7 @@
 export const DEFAULTS = {
   crt_default: true, boot_screen: true, presence: true,
   deadline_on: true, deadline: '2026-11-23T00:00:00+09:00', deadline_closes: false,
+  print_sheet: true, my_lines: true, error_reports: true,
   context_menu: true, minimize: true, trash: true, memo: true,
   first_sentence: true, typing_count: true, notify_free: true,
   grid_box_default: false, about: true,

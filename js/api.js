@@ -162,6 +162,15 @@ export const petCat = () => call('pet_cat');
 export const storyCards = () => call('story_cards');
 export const getAbout = () => call('get_about');
 export const getCounters = () => call('get_counters');
+// 내가 쓴 줄: every line written as this 이름 + 학번 (any device)
+export const myLines = ({ name, studentId }) => call('my_lines', { p_student_id: studentId, p_name: name });
+// Crash report (fire and forget; never throws)
+export function logClientError({ message, source = null, stack = null, version = null }) {
+  try {
+    sb.rpc('log_client_error', { p_message: message, p_source: source, p_stack: stack, p_version: version,
+      p_agent: navigator.userAgent.slice(0, 200), p_client: clientToken() }).then(() => {}, () => {});
+  } catch { /* ignore */ }
+}
 
 // Live "누군가 쓰는 중 (23자)": a Realtime broadcast per story, numbers only.
 export function typingChannel(storyId, onCount) {
@@ -300,4 +309,5 @@ export const admin = {
   listGuestbook:     ()            => call('admin_list_guestbook', {}),
   setGuestbookDeleted: (id, deleted) => call('admin_set_guestbook_deleted', { p_id: id, p_deleted: deleted }),
   lineStamps:        (lineId)      => call('admin_line_stamps', { p_line_id: lineId }),
+  clientErrors:      (limit = 200) => call('admin_client_errors', { p_limit: limit }),
 };

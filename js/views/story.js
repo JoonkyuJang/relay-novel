@@ -7,6 +7,7 @@ import { on, fun, bus, X, manuscript, reduceMotion, deadlinePassed } from '../ex
 import { fillPad, stampButtons, updateTicks, seal } from '../extras/stamps.js';
 import { relayRecord, recordView, gridIcon } from '../extras/record.js';
 import { play } from '../extras/sound.js';
+import { printSheets } from '../extras/print.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const STATUS_CHIP = {
@@ -194,7 +195,8 @@ export function storyView(app, storyId) {
         : `${story.line_count}줄로 완결된 이야기예요. 함께 써 주셔서 고마워요.`),
       h('div', { class: 'actions', style: 'justify-content:flex-start' },
         on('reading') ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.go(`/read/${storyId}`) }, '▶ 낭독회 열기') : null,
-        h('button', { type: 'button', class: 'btn', onclick: copyLink }, '링크 복사')),
+        h('button', { type: 'button', class: 'btn', onclick: copyLink }, '링크 복사'),
+        on('print_sheet') ? h('button', { type: 'button', class: 'btn', onclick: () => printSheets(story) }, '원고지로 인쇄') : null),
     ];
   }
 

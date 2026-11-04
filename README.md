@@ -39,6 +39,7 @@ css/extras.css                      styles for the 부가 기능 (stamps, cat, s
 fonts/                              Neo둥근모 + 갈무리11 split into common / rare Hangul, OFL — see fonts/README.md
 tools/version.mjs                   stamps ?v=<hash> on every CSS/JS file in index.html (run before committing)
 tools/split-fonts.py                re-makes the split fonts + css/fonts.css from tools/fonts-src/
+tools/og.html, og.png               the link-preview card (KakaoTalk etc.) and its source page
 js/api.js                           the ONLY file that talks to the backend (+ local identity/prefs)
 js/wm.js                            window manager: draggable windows on desktop, one window at a time on phones
 js/index.js                         app shell: boot, login, menu bar, icons/dock, routing, presence
@@ -88,7 +89,8 @@ Every extra has a switch in **관리자 콘솔 → 부가 기능** (inner tabs �
   generated from BM JUA), `cat.js` + `cat-sprites.js` (문냥이), `saver.js` (화면 보호기 3·6·10분),
   `daynight.js` (sky by Seoul time, real moon phase), `desk.js` (메모장, 휴지통, 마감 시계, 우클릭 메뉴,
   오늘의 첫 문장, 이 컴퓨터에 관하여), `record.js` (이야기 기록), `sound.js` + `synth.js` (all sounds synthesized with WebAudio in one retro chip palette — pulse, triangle, LFSR noise, 60 Hz steps — no files; off by default per device; the 낭독회 voice follows Korean phrase intonation),
-  `fun.js` (숨은 재미 — deliberately not in 도움말).
+  `fun.js` (숨은 재미 — deliberately not in 도움말), `print.js` (원고지로 인쇄), `report.js` (오류 보고 → 관리 · 기록).
+  `js/views/mine.js` is 내가 쓴 줄 (click your name in the menu bar). The admin console loads on demand.
 - Database: `stamps`, `counters` (cat pets, unused batons) and RPCs `toggle_stamp`, `get_story_stamps`,
   `pet_cat`, `story_cards`, `get_about`, `get_counters`, `admin_line_stamps` (migrations `20261106000000_extras.sql`,
   `20261108000000_hardening.sql`: one baton per person, stamp ownership by device, range checks).

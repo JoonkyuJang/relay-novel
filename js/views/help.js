@@ -14,7 +14,7 @@ function perPerson(s) {
 }
 
 export function helpView(app) {
-  const scroll = h('div', { class: 'win-scroll', style: 'padding:16px 20px' });
+  const scroll = h('div', { class: 'win-scroll', style: 'padding:16px 20px', tabindex: '0' });   // text only: focusable so the keyboard can scroll it
   const body = document.createDocumentFragment();
   body.append(scroll);
 

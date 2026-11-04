@@ -491,6 +491,27 @@ await test('write_check explains before claiming; the deadline can close writing
   assert.equal(await rpc('write_check', { p_story_id: id, p_student_id: '2026009201' }), null);
 });
 
+await test('내가 쓴 줄 by 이름 + 학번; crash reports are throttled and admin-only', async () => {
+  const id = (await rpc('create_story', { p_title: '내 줄', p_text: '내가 시작', ...who(9300) })).story_id;
+  const b = await rpc('claim_baton', { p_story_id: id, ...who(9301) });
+  await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '내가 이음', ...who(9301), p_token: b.token });
+  const line2 = (await rpc('get_story', { p_story_id: id })).lines[1].id;
+  await rpc('toggle_stamp', { p_line_id: line2, p_kind: 'sun', ...who(9302) });
+  const mine = await rpc('my_lines', { p_student_id: '2026-009301', p_name: '작가9301' });
+  assert.equal(mine.length, 1); assert.equal(mine[0].text, '내가 이음'); assert.equal(mine[0].position, 2);
+  assert.deepEqual(mine[0].stamps, { sun: 1, laugh: 0, cur: 0 });
+  assert.deepEqual(await rpc('my_lines', { p_student_id: '2026009301', p_name: '남' }), []);   // 학번 alone isn't enough
+
+  await rpc('log_client_error', { p_message: 'TypeError: x is undefined', p_source: 'js/views/story.js:12', p_client: 'dev-a' });
+  await rpc('log_client_error', { p_message: '', p_client: 'dev-a' });                        // ignored
+  for (let i = 0; i < 25; i++) await rpc('log_client_error', { p_message: `spam ${i}`, p_client: 'dev-b' });
+  const errs = await admin('admin_client_errors', { p_limit: 100 });
+  assert.equal(errs.filter(e => e.message.startsWith('spam')).length, 20, 'per-device hourly cap');
+  assert.ok(errs.some(e => e.message.startsWith('TypeError') && e.device === 'dev-a' && !('client_token' in e)));
+  await assert.rejects(rpc('admin_client_errors', {}), /permission denied/);
+  await expectErr(rpc('admin_client_errors', {}, { as: 'authenticated', sub: USER }), 'not_admin');
+});
+
 await test('counters: cat pets; 휴지통 counts batons let go without a line', async () => {
   const before = (await rpc('get_about')).cat_pets;
   await Promise.all(Array.from({ length: 5 }, () => rpc('pet_cat')));

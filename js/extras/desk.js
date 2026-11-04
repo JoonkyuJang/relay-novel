@@ -221,6 +221,7 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
     const saverOff = api.prefs.get('saver') === '0';
     return [
       ['새 이야기', () => app.go('/new')],
+      on('my_lines') && app.identity() ? ['내가 쓴 줄', () => app.go('/mine')] : null,
       on('minimize') ? ['창 정리하기', () => wm.tidy()] : null,
       on('minimize') ? ['모두 접어 두기', () => wm.minimizeAll()] : null,
       '-',

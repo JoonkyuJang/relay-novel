@@ -43,15 +43,26 @@ export function storiesView(app) {
         h('a', { href: `#/story/${s.id}`, class: 'done-card-title' }, name),
         h('span', { class: 'muted' }, meta),
         h('div', { class: 'done-card-row' },
-          info && on('stamps') ? KINDS.map(k => h('span', { class: 'tot', title: NAMES[k], 'aria-label': `${NAMES[k]} ${info.stamps?.[k] ?? 0}개` }, stampSvg(k, { size: 18 }), h('span', { 'aria-hidden': 'true' }, info.stamps?.[k] ?? 0))) : null,
+          info && on('stamps') ? KINDS.map(k => h('span', { class: 'tot', role: 'img', title: NAMES[k], 'aria-label': `${NAMES[k]} ${info.stamps?.[k] ?? 0}개` }, stampSvg(k, { size: 18 }), h('span', { 'aria-hidden': 'true' }, info.stamps?.[k] ?? 0))) : null,
           h('span', { style: 'flex:1' }),
           on('reading') ? h('a', { href: `#/read/${s.id}`, class: 'btn btn-sm' }, '▶ 낭독회') : null)),
       h('a', { href: `#/story/${s.id}`, class: 'done-card-seal', tabindex: '-1', 'aria-hidden': 'true' }, seal(78, -7)));
   }
 
+  // story_cards scans every finished story: fetch it only when the set of finished stories
+  // changes (or every few minutes, for stamp totals), not on every list refresh
+  let cards = {}, cardsKey = null, cardsAt = 0, shownSig = null;
   async function refresh() {
     try {
-      const [list, cards] = await Promise.all([api.listStories(), api.storyCards().catch(() => ({}))]);
+      const list = await api.listStories();
+      const doneKey = list.filter(s => s.status === 'completed').map(s => s.id).sort().join();
+      if (doneKey && (doneKey !== cardsKey || Date.now() - cardsAt > 180e3)) {
+        cards = await api.storyCards().catch(() => cards);
+        cardsKey = doneKey; cardsAt = Date.now();
+      }
+      const sig = JSON.stringify([Math.floor(Date.now() / 60e3), list.map(s => [s.id, s.title, s.line_count, s.status, s.writing, s.updated_at]), cards]);
+      if (sig === shownSig) return;                         // nothing to redraw
+      shownSig = sig;
       const open = list.filter(s => s.status === 'open');
       const done = list.filter(s => s.status === 'completed')
         .sort((a, b) => Date.parse(b.completed_at) - Date.parse(a.completed_at));
@@ -77,6 +88,7 @@ export function storiesView(app) {
     type: 'stories', route: '/stories', title: '이야기 서랍', body,
     size: { w: 520, h: 500 }, minSize: { w: 380, h: 300 }, origin: { x: 36, y: 24 },
     mount() { refresh(); unwatch = api.watch(['list'], refresh); },
+    onSettings() { shownSig = null; refresh(); },
     unmount() { unwatch?.(); },
   };
 }

@@ -1,7 +1,7 @@
 // 관리자 콘솔 + 관리용 이야기 창. Only reachable after the hidden admin login.
 import * as api from '../api.js';
 import { h, fmtTime, relTime, errorText, osConfirm, osPrompt } from '../ui.js';
-import { DEFAULTS } from '../extras/extras.js';
+import { DEFAULTS, on } from '../extras/extras.js';
 
 const A = api.admin;
 const short = (s, n = 8) => (s ? String(s).slice(0, n) : '');
@@ -53,7 +53,9 @@ const EXTRA_TABS = [
     ['typing_count', '누군가 쓰는 중 글자 수', '숫자만 실시간으로'],
     ['notify_free', '자리 나면 알려 주기', '바통이 풀리면 종 + 제목 깜빡임'],
     ['grid_box_default', '원고지 쓰기 칸을 기본으로', '각자 바꿀 수 있어요'],
-    ['about', '이 컴퓨터에 관하여', '오른쪽 클릭 메뉴에서'],
+    ['about', '이 컴퓨터에 관하여', '왼쪽 위 로고 · 오른쪽 클릭 메뉴'],
+    ['my_lines', '내가 쓴 줄', '메뉴 막대의 내 이름을 누르면'],
+    ['error_reports', '오류 보고', '브라우저 오류를 관리 · 기록에 모아요 (이름·학번 없이)'],
   ]],
   ['낮과 밤', [
     ['daynight', '낮과 밤 바탕화면', '서울 시간 · 아침 · 낮 · 노을 · 밤'],
@@ -92,6 +94,7 @@ const EXTRA_TABS = [
     ['relay_record', '이어달리기 기록', '쓰인 시각 띠 + 빠른 바통 · 긴 기다림'],
     ['completion_fx', '완결 순간 효과', '창 흔들림 + 완결 도장 + 고양이 점프 + 종소리'],
     ['reading_credits', '낭독회 끝에 함께 쓴 사람', '이름만 가나다순 (학번 없이, 어느 줄인지 연결 없이)'],
+    ['print_sheet', '원고지로 인쇄', '완결된 이야기를 200자 원고지에 · 이름만'],
   ]],
   ['소리', [
     ['sound', '소리 기능', '끄면 아무 소리도 나지 않아요'],
@@ -256,13 +259,26 @@ export function adminView(app) {
   }
 
   async function viewLog() {
-    const rows = await A.log(200);
-    if (!rows.length) return h('p', { class: 'muted', style: 'margin:0' }, '기록이 없어요.');
-    return h('table', { class: 'table' },
+    const [rows, errs] = await Promise.all([A.log(200), A.clientErrors(100).catch(() => [])]);
+    const browser = (ua = '') => (/iPhone|iPad/.test(ua) ? 'iOS ' : /Android/.test(ua) ? 'Android ' : /Mac OS/.test(ua) ? 'Mac ' : /Windows/.test(ua) ? 'Windows ' : '')
+      + (/CriOS|Chrome\//.test(ua) && !/Edg\//.test(ua) ? 'Chrome' : /Edg\//.test(ua) ? 'Edge' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '?');
+    const errors = h('section', { style: 'margin:0 0 18px' },
+      h('h3', { style: 'margin:0 0 8px;font-size:13px' }, `브라우저 오류 ${errs.length ? `(최근 ${errs.length}개)` : ''}`),
+      !errs.length ? h('p', { class: 'muted', style: 'margin:0' }, on('error_reports') ? '아직 보고된 오류가 없어요.' : '오류 보고가 꺼져 있어요 (부가 기능 · 바탕화면).')
+        : h('table', { class: 'table' },
+          h('thead', {}, h('tr', {}, ['시각', '내용', '위치', '브라우저', '기기'].map(t => h('th', { scope: 'col' }, t)))),
+          h('tbody', {}, errs.map(e => h('tr', {},
+            h('td', { class: 'muted' }, fmtTime(e.at)),
+            h('td', {}, h('code', { style: 'word-break:break-all', title: e.stack ?? '' }, e.message)),
+            h('td', { class: 'muted' }, h('code', { style: 'word-break:break-all' }, e.source ?? '')),
+            h('td', { class: 'muted', title: e.agent ?? '' }, browser(e.agent)),
+            h('td', { class: 'muted' }, e.device ?? ''))))));
+    if (!rows.length) return [errors, h('p', { class: 'muted', style: 'margin:0' }, '기록이 없어요.')];
+    return [errors, h('h3', { style: 'margin:0 0 8px;font-size:13px' }, '관리 기록'), h('table', { class: 'table' },
       h('thead', {}, h('tr', {}, ['시각', '동작', '대상', '내용'].map(t => h('th', { scope: 'col' }, t)))),
       h('tbody', {}, rows.map(r => h('tr', {},
         h('td', { class: 'muted' }, fmtTime(r.created_at)), h('td', {}, r.action), h('td', { class: 'muted' }, short(r.target_id)),
-        h('td', { class: 'muted' }, h('code', { style: 'word-break:break-all' }, r.details ? JSON.stringify(r.details).slice(0, 240) : ''))))));
+        h('td', { class: 'muted' }, h('code', { style: 'word-break:break-all' }, r.details ? JSON.stringify(r.details).slice(0, 240) : '')))))) ];
   }
 
   async function viewExtras() {

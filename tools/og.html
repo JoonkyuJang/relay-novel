@@ -1,0 +1,46 @@
+<!-- Source for og.png (the link-preview image). Render at 1200x630 from the repo root, e.g. with a local server + a browser screenshot. -->
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="/css/fonts.css"><link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/extras.css">
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body { background: var(--desk) radial-gradient(rgba(29,42,68,.16) 1.2px, transparent 1.6px) 0 0 / 12px 12px; position: relative; font-family: Galmuri11, sans-serif; }
+  .bar { position: absolute; inset: 0 0 auto 0; height: 56px; background: #1D2A44; color: #FFF9EF; display: flex; align-items: center; gap: 16px; padding: 0 28px; font-size: 26px; font-weight: 700; }
+  .bar .r { margin-left: auto; font-weight: 400; font-size: 22px; opacity: .85; }
+  .w { position: absolute; left: 70px; top: 104px; width: 760px; height: 440px; background: var(--paper); border: 4px solid var(--ink); box-shadow: 10px 10px 0 var(--ink); }
+  .t { height: 52px; border-bottom: 4px solid var(--ink); display: flex; align-items: center; justify-content: center; gap: 18px;
+       background: repeating-linear-gradient(to bottom, var(--ink) 0 3px, transparent 3px 7px) center / 100% 26px no-repeat; }
+  .t h2 { margin: 0; background: var(--paper); padding: 0 18px; font-size: 24px; }
+  .lines { padding: 26px 34px; font-family: NeoDGM, sans-serif; font-size: 30px; line-height: 50px; color: var(--ink); }
+  .lines .n { color: #8C93A6; display: inline-block; width: 62px; }
+  .lines .p { color: #8C93A6; }
+  .big { position: absolute; left: 862px; top: 120px; width: 300px; color: var(--ink); }
+  .big h1 { font-family: NeoDGM, sans-serif; font-size: 58px; line-height: 70px; margin: 0; }
+  .big p { font-size: 24px; line-height: 38px; margin: 14px 0 0; }
+  .seal { position: absolute; left: 905px; top: 395px; }
+  .cat { position: absolute; left: 700px; top: 486px; }
+  .stamp { position: absolute; }
+</style>
+<div class="bar">◆ 연문회 OS<span class="r">연세문학회 · 2026 가을</span></div>
+<section class="w"><div class="t"><h2>달이 뜨는 우체통</h2></div>
+  <div class="lines">
+    <div><span class="n">01</span>옛날 옛적, 작은 마을에</div>
+    <div><span class="n">02</span>밤마다 편지를 뱉는 우체통이 있었다</div>
+    <div><span class="n">03</span>오늘 밤엔 내 이름이 적혀 있었다.</div>
+    <div class="p"><span class="n">04</span>▒▒▒▒▒ 누군가 쓰는 중…</div>
+  </div>
+</section>
+<div class="big"><h1>릴레이<br>소설</h1><p>한 사람이 한 줄씩,<br>스무 줄이 모이면<br>한 편이 완성돼요.</p></div>
+<div class="seal" id="seal"></div>
+<div class="cat" id="cat"></div>
+<script src="/js/vendor/supabase-js-2.117.3.umd.js"></script>
+<script type="module">
+  import { injectStampDefs, seal, stampSvg } from '/js/extras/stamps.js';
+  import { catImg } from '/js/extras/cat.js';
+  injectStampDefs();
+  document.getElementById('seal').append(seal(220, -9));
+  document.getElementById('cat').append(catImg('happy', { scale: 4 }));
+  const s1 = stampSvg('sun', { size: 50, rot: -12 }); s1.classList.add('stamp'); s1.style.cssText += 'left:760px;top:196px;opacity:.9';
+  const s2 = stampSvg('cur', { size: 50, rot: 10 }); s2.classList.add('stamp'); s2.style.cssText += 'left:752px;top:262px;opacity:.9';
+  document.body.append(s1, s2);
+  document.fonts.ready.then(() => { document.body.dataset.ready = '1'; });
+</script>
