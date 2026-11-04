@@ -256,6 +256,37 @@ export function makeSynth(ac, { volume = 0.55 } = {}) {
     pop(t) {
       chip(t, { base: B, pitch: [0, 4, 7, 12, 16], vol: [0.8, 1, 1, 0.7, 0.35], duty: 0.5, peak: 0.16, echo: 0.1 });
     },
+    // ---- interface: short and quiet, so they never get in the way
+    // window opens: a quick rising C–G–C "bwip"
+    open(t) {
+      chip(t, { base: B, pitch: [0, 0, 7, 7, 12, 12], vol: [0.6, 0.8, 0.9, 0.8, 0.6, 0.3], duty: 0.25, peak: 0.11, echo: 0.08 });
+    },
+    // window closes: the same, falling
+    close(t) {
+      chip(t, { base: B, pitch: [12, 12, 7, 7, 0, 0], vol: [0.6, 0.8, 0.8, 0.6, 0.4, 0.2], duty: 0.25, peak: 0.1 });
+      noise(t + 6 * FR, { rate: [6000, 3000], vol: [0.6, 0.2], peak: 0.06 });                      // a soft "tk" as it shuts
+    },
+    // 접어 두기: a stepped slide down into the tray
+    minimize(t) {
+      chip(t, { base: B, pitch: [12, 9, 5, 2, -2, -5, -7], vol: [0.7, 0.8, 0.8, 0.7, 0.5, 0.35, 0.2], duty: 0.5, peak: 0.08, echo: 0.06 });
+    },
+    // 다시 펼치기: the slide back up
+    restore(t) {
+      chip(t, { base: B, pitch: [-7, -5, -2, 2, 5, 9, 12], vol: [0.3, 0.5, 0.7, 0.8, 0.8, 0.7, 0.4], duty: 0.5, peak: 0.08, echo: 0.06 });
+    },
+    // right-click menu appears: one tiny tick
+    menu(t) {
+      chip(t, { base: B, pitch: [19, 19], vol: [0.9, 0.5], duty: 0.25, peak: 0.12 });
+    },
+    // a menu item is chosen: a short two-step blip
+    select(t) {
+      chip(t, { base: B, pitch: [12, 12, 19, 19], vol: [0.7, 0.6, 0.8, 0.3], duty: 0.25, peak: 0.1 });
+    },
+    // an OS dialog asks something: the classic two-tone alert (A5, E5)
+    alert(t) {
+      chip(t, { base: B, pitch: [9, 9, 9, 9, 9], vol: [0.9, 1, 1, 0.8, 0.5], duty: 0.5, peak: 0.1, echo: 0.1 });
+      chip(t + 7 * FR, { base: B, pitch: [4, 4, 4, 4, 4, 4], vol: [0.9, 1, 0.9, 0.7, 0.5, 0.25], duty: 0.5, peak: 0.1, echo: 0.1 });
+    },
   };
 
   // ---------------------------------------------------------- 낭독회 voice

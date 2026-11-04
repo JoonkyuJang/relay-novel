@@ -288,7 +288,6 @@ export function storyView(app, storyId) {
     const ta = h('textarea', { class: 'field', rows: 2, id: `ta-${storyId}`, value: api.getDraft(storyId), maxlength: baton.max_chars * 2, enterkeyhint: 'send', 'aria-describedby': `hint-${storyId}` });
     const counter = h('span', { class: 'counter' });
     const submitBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: submit }, '올리기');
-    let lastKey = 0;
     const update = () => {
       const n = api.countChars(ta.value);
       const full = n === baton.max_chars && fun('fun_full');
@@ -298,10 +297,7 @@ export function storyView(app, storyId) {
       api.setDraft(storyId, ta.value);
       typing?.send(n);
     };
-    ta.addEventListener('input', (e) => {
-      update();
-      if (Date.now() - lastKey > 40) { lastKey = Date.now(); play('key', { ch: e.inputType?.startsWith('delete') ? '\b' : e.data?.slice(-1) }); }
-    });
+    ta.addEventListener('input', update);          // (the key sound is global: js/extras/sound.js)
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); submit(); }
       else if (e.key === 'Enter') e.preventDefault();      // one line only

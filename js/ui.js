@@ -232,6 +232,7 @@ export function osDialog({ title = '연문회 OS', message = '', input = null, o
     }
     document.addEventListener('keydown', onKey, true);
     document.body.append(modal);
+    dispatchEvent(new CustomEvent('rn-sound', { detail: 'alert' }));
     (field ?? okBtn).focus();
     if (field?.select) field.select();
   });

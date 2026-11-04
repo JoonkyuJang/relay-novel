@@ -4,6 +4,9 @@
 import { h, closeProps } from './ui.js';
 import { prefs } from './api.js';
 
+// interface sounds (sound.js listens; wm.js stays free of the audio code)
+const sound = (name) => dispatchEvent(new CustomEvent('rn-sound', { detail: name }));
+
 const phoneQuery = window.matchMedia('(max-width: 767px)');
 export const isPhone = () => phoneQuery.matches;
 
@@ -165,6 +168,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     el.addEventListener('focusin', () => { if (active !== key && wins.has(key)) focus(key, { keep: true }); });   // keyboard users raise windows too
     view.mount?.();
     focus(key, { silent });
+    if (!silent) sound('open');
     // move keyboard focus into the new window (views that focus a field do so a tick later)
     if (!silent && (document.activeElement === document.body || document.activeElement?.closest?.('.win'))) el.focus({ preventScroll: true });
     return win;
@@ -177,6 +181,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     closeProps();
     win.minimized = true;
     win.el.hidden = true;
+    sound('minimize');
     win.trayBtn = h('button', { type: 'button', class: 'tray-btn', title: '다시 펼치기', onclick: () => focus(key) },
       h('span', { class: 'tray-ico', 'aria-hidden': 'true' }), h('span', {}, win.titleEl.textContent));
     tray.append(win.trayBtn);
@@ -193,6 +198,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     if (!win?.minimized) return;
     win.minimized = false;
     win.el.hidden = false;
+    sound('restore');
     win.trayBtn?.remove(); win.trayBtn = null;
     if (tray && !tray.children.length) tray.hidden = true;
     clamp(win.el);
@@ -214,6 +220,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     win.trayBtn?.remove();
     if (tray && !tray.children.length) tray.hidden = true;
     const hadFocus = win.el.contains(document.activeElement);
+    sound('close');
     win.view.unmount?.();
     win.el.remove();
     wins.delete(key);

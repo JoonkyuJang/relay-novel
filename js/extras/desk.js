@@ -206,9 +206,10 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
     closeMenu();
     menu = h('div', { class: 'ctx', role: 'menu' }, items.map(it => it === '-'
       ? h('div', { class: 'ctx-sep', role: 'separator' })
-      : h('button', { type: 'button', role: 'menuitem', class: 'ctx-item', onclick: () => { closeMenu(); it[1](); } },
+      : h('button', { type: 'button', role: 'menuitem', class: 'ctx-item', onclick: () => { closeMenu(); play('select'); it[1](); } },
           h('span', {}, it[0]), it[2] ? h('span', { class: 'faint' }, it[2]) : null)));
     document.body.append(menu);
+    play('menu');
     const w = menu.offsetWidth, ht = menu.offsetHeight;
     menu.style.left = `${Math.min(x, innerWidth - w - 6)}px`;
     menu.style.top = `${Math.min(y, innerHeight - ht - 6)}px`;

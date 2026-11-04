@@ -947,6 +947,45 @@ await step('versioned files: every module and stylesheet loads once, with its ?v
   assert.ok(urls.filter(u => u.endsWith('.js') || u.includes('.js?')).length >= 26);
 });
 
+await step('sounds: typing in every text field, window open / minimize / restore / close, menus, dialogs', async () => {
+  const p = await newUser('소리', '2026100813');
+  await p.addInitScript(() => { localStorage.setItem('rn.sound', '1'); localStorage.setItem('rn.debugSounds', '1'); });
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').waitFor();
+  const heard = () => p.evaluate(() => { const s = window.__rnSounds ?? []; window.__rnSounds = []; return s; });
+  await heard();
+  await p.click('.icon[data-route="/guestbook"]');
+  await win(p, 'guestbook').locator('textarea').waitFor();
+  await win(p, 'guestbook').locator('textarea').pressSequentially('안녕', { delay: 80 });
+  let s = await heard();
+  assert.ok(s.includes('open'), `guestbook opened with a sound: ${s}`);
+  assert.ok(s.filter(x => x === 'key').length >= 2, `typing in 방명록: ${s}`);
+  await p.goto(`${BASE}/#/memo`); await win(p, 'memo').locator('textarea').waitFor(); await heard();
+  await win(p, 'memo').locator('textarea').pressSequentially('메모', { delay: 80 });
+  assert.ok((await heard()).includes('key'), 'typing in 메모장');
+  await win(p, 'memo').locator('.win-min').click();
+  assert.deepEqual(await heard(), ['minimize']);
+  await p.locator('.tray-btn').first().click();
+  assert.ok((await heard()).includes('restore'));
+  await win(p, 'memo').locator('.win-close').click();
+  assert.ok((await heard()).includes('close'));
+  await win(p, 'guestbook').locator('.win-close').click();
+  await p.waitForTimeout(150); await heard();
+  await p.mouse.click(1000, 600, { button: 'right' });
+  await p.locator('.ctx').waitFor();
+  assert.ok((await heard()).includes('menu'));
+  await p.locator('.ctx >> text=이 컴퓨터에 관하여').click();
+  await win(p, 'about').waitFor();
+  s = await heard();
+  assert.ok(s.includes('select') && s.includes('open'), `menu pick opens a window: ${s}`);
+  // logging out closes every window: one close sound, not one per window
+  await p.locator('.menubar >> text=로그아웃').click();
+  if (await p.locator('.modal').count()) { assert.ok((await heard()).includes('alert')); await p.locator('.modal >> text=확인').click(); }
+  await p.waitForSelector('.win[data-key="login"]');
+  s = await heard();
+  assert.ok(s.filter(x => x === 'close').length <= 1, `one close sound at log-out: ${s}`);
+});
+
 // Last on purpose: it wipes the database.
 await step('관리 · 초기화: one counter, then everything (with a backup download first)', async () => {
   await finishedStory('지워질 이야기');
