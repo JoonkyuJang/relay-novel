@@ -239,7 +239,7 @@ export function initCat(app, wm, desktop) {
       }, soundOn() ? 85 : 55);
     },
     hide() { clearTimers(); state = 'away'; el.hidden = true; },
-    show() { el.hidden = !on('cat'); state = 'sit'; place(x, floorY()); sit(); },
+    show() { state = 'sit'; home(); },
     look(dir) { if (state === 'sit') { flip = dir < 0; setFrame('look'); img.style.transform = flip ? 'scaleX(-1)' : ''; } },
     refresh() { setFrame(frameName); },
   };
@@ -275,8 +275,9 @@ export function initCat(app, wm, desktop) {
     el.hidden = !on('cat') || (isPhone() && !on('cat_phone'));
     el.title = X('cat_name');
     el.setAttribute('aria-label', `${X('cat_name')} 쓰다듬기`);
+    document.body.classList.toggle('cat-phone', isPhone() && !el.hidden);   // phone windows leave it a gap above the dock
     if (el.hidden) { clearTimers(); return; }
-    const fx = isPhone() ? desktop.clientWidth - 40 : Math.min(desktop.clientWidth - 150, Math.max(80, x || desktop.clientWidth * 0.6));
+    const fx = isPhone() ? desktop.clientWidth - W - 10 : Math.min(desktop.clientWidth - 150, Math.max(80, x || desktop.clientWidth * 0.6));
     if (state === 'nap' && !isPhone()) return;
     place(fx, floorY());
     flip = isPhone();

@@ -320,6 +320,10 @@ body.amber .grid-cells, body.amber .grid-cells span { border-color: #5E3F00; }
   .props.sheet .stamp-btn svg { width: 40px; height: 40px; }
   .props.sheet .stamp-btn.is-mine { border-color: #C23B32; }
   .tray, .sticky, .icon.extra { display: none !important; }
+  .win.amber-toast { left: 10px !important; right: 10px; top: auto !important; bottom: 74px; width: auto !important; height: auto !important; }
+  body.cat-phone:not(.not-entered) .win { bottom: 48px; }
+  .not-entered .cat-layer, .not-entered .sky-orb { display: none; }
+  body.cat-phone .win.amber-toast { bottom: 110px; }
   .read-stage { padding: 16px 14px; }
   .read-cur { font-size: 20px; line-height: 30px; }
   .read-ctrl select.field { flex: 1 1 40%; }

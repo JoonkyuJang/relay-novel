@@ -753,6 +753,48 @@ await step('mobile: stamp sheet buttons, cat on the dock, D-n deadline', async (
   await p.screenshot({ path: `${SHOTS}/33-mobile-story.png` });
 });
 
+await step('mobile tour: drawer cards, finished story, 낭독회, help, about, memo, sky, amber, saver', async () => {
+  const p = await newUser('폰구경', '2026100806', { mobile: true });
+  const id = await finishedStory('폰으로 보는 이야기');
+  const shot = (n) => p.screenshot({ path: `${SHOTS}/m-${n}.png` });
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').locator('.done-card').first().waitFor();
+  await shot('01-drawer');
+  await p.goto(`${BASE}/#/story/${id}`);
+  await win(p, `story:${id}`).locator('.story-head h3').waitFor();
+  await win(p, `story:${id}`).locator('.record summary').click();
+  await win(p, `story:${id}`).locator('.win-scroll').evaluate(el => { el.scrollTop = el.scrollHeight; });
+  await shot('02-record-open');
+  await win(p, `story:${id}`).locator('text=▶ 낭독회 열기').click();
+  const r = win(p, `read:${id}`);
+  await r.locator('select[aria-label="빠르기"]').selectOption('2');
+  await r.locator('button[aria-label="재생"]').click();
+  await r.locator('.read-cur').filter({ hasText: /\S/ }).waitFor();
+  await p.waitForTimeout(900);
+  await shot('03-reading');
+  for (const route of ['help', 'about', 'memo']) {
+    await p.goto(`${BASE}/#/${route}`);
+    await win(p, route).waitFor();
+    await p.waitForTimeout(400);
+    await shot(`04-${route}`);
+  }
+  await p.locator('#dock >> text=서랍').click();
+  await p.evaluate(() => { localStorage.setItem('rn.daynight', 'day'); });
+  await p.reload(); await win(p, 'stories').waitFor();
+  await shot('05-day');
+  await p.evaluate(() => { localStorage.setItem('rn.daynight', 'night'); });
+  await p.reload(); await win(p, 'stories').waitFor();
+  await shot('06-night');
+  for (let i = 0; i < 5; i++) await p.locator('.menubar .logo').tap();
+  await p.waitForFunction(() => document.body.classList.contains('amber'));
+  await shot('07-amber');
+  await p.locator('.amber-toast >> text=돌아가기').tap();
+  await p.evaluate(async () => { const m = await import('./js/extras/extras.js'); m.bus.emit('saver-now', {}); });
+  await p.locator('.saver').waitFor({ timeout: 10000 });
+  await p.waitForTimeout(2500);
+  await shot('08-saver');
+});
+
 await step('no page errors', async () => { assert.deepEqual(errors, []); });
 
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);
