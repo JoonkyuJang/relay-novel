@@ -29,7 +29,8 @@ export function newStoryView(app) {
     go.textContent = ident ? '시작하기' : '로그인하고 시작하기';
     const s = st();
     go.disabled = s.submissions_open === false || s.allow_new_stories === false;
-    if (go.disabled) msg.replaceChildren(h('div', { class: 'notice warn' }, errorText({ code: s.submissions_open === false ? 'submissions_closed' : 'new_stories_closed' })));
+    if (go.disabled) msg.replaceChildren(h('div', { class: 'notice warn', dataset: { closed: '1' } }, errorText({ code: s.submissions_open === false ? 'submissions_closed' : 'new_stories_closed' })));
+    else if (msg.querySelector('[data-closed]')) msg.replaceChildren();
   }
   text.addEventListener('input', update);
   title.addEventListener('input', update);

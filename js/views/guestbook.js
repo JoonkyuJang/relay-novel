@@ -37,12 +37,13 @@ export function guestbookView(app) {
   }
   function updateWho() {
     const ident = app.identity();
-    who.textContent = ident ? `${ident.name} 님으로 남겨요 · 이름은 숨겨져요` : '이름은 숨겨져요';
+    who.textContent = ident ? `${ident.name} 님으로 남겨요 · 이름은 사람 아이콘을 눌러야 보여요` : '이름은 사람 아이콘을 눌러야 보여요';
     if (Date.now() >= cooldownUntil) {
       send.textContent = ident ? '남기기' : '로그인하고 남기기';
       send.disabled = st().guestbook_open === false;
     }
-    if (st().guestbook_open === false) msg.replaceChildren(h('div', { class: 'notice warn' }, errorText({ code: 'guestbook_closed' })));
+    if (st().guestbook_open === false) msg.replaceChildren(h('div', { class: 'notice warn', dataset: { closed: '1' } }, errorText({ code: 'guestbook_closed' })));
+    else if (msg.querySelector('[data-closed]')) msg.replaceChildren();     // reopened by the admin
   }
   ta.addEventListener('input', update);
   ta.addEventListener('keydown', (e) => {

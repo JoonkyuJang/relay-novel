@@ -49,7 +49,8 @@ export function fillPad(pad, marks = []) {
     el.style.opacity = (0.8 + ((i * 53) % 19) / 100).toFixed(2);
     return el;
   }));
-  pad.setAttribute('aria-label', marks.length ? `도장 ${marks.length}개` : '');
+  if (marks.length) { pad.setAttribute('role', 'img'); pad.setAttribute('aria-label', `도장 ${marks.length}개`); }
+  else { pad.removeAttribute('role'); pad.removeAttribute('aria-label'); }
 }
 
 // The stamp row inside a line's 속성 window. state: { counts, mine } (mutated on toggle).
@@ -110,11 +111,11 @@ export function helpSection() {
   const meaning = { sun: '잘 이어 썼다!', laugh: '웃음이 났다!', cur: '다음 줄이 기다려진다!' };
   return h('section', { class: 'help-stamps' },
     h('h3', {}, '도장'),
-    h('p', {}, '마음에 드는 줄에 도장을 찍어 주세요. 줄 옆 사람 아이콘을 누르면(데스크톱은 올리면) 속성 창에 도장이 있어요.'),
+    h('p', {}, '마음에 드는 줄에 도장을 찍어 주세요. 줄 옆 사람 아이콘을 누르면(컴퓨터에선 마우스를 올리면) 속성 창에 도장이 있어요.'),
     h('div', { class: 'help-stamp-row' }, KINDS.map(k => h('div', {},
       stampSvg(k, { mini: false, size: 96, label: NAMES[k] }), h('b', {}, NAMES[k]), h('span', { class: 'muted' }, meaning[k])))),
     h('ul', {},
-      h('li', {}, '한 줄에 종류마다 한 번씩 찍을 수 있어요. 다시 누르면 취소.'),
+      h('li', {}, '한 줄에 종류마다 한 번씩 찍을 수 있어요. 다시 누르면 취소돼요.'),
       h('li', {}, '줄 옆에는 그림만, 숫자는 속성 창에서만 보여요.'),
       h('li', {}, '손님(둘러보기)은 볼 수만 있어요.')));
 }

@@ -239,7 +239,7 @@ export function initCat(app, wm, desktop) {
         i++;
       }, soundOn() ? 85 : 55);
     },
-    hide() { clearTimers(); state = 'away'; el.hidden = true; },
+    hide() { reset(); state = 'away'; el.hidden = true; },
     show() { state = 'sit'; home(); },
     look(dir) { if (state === 'sit') { flip = dir < 0; setFrame('look'); img.style.transform = flip ? 'scaleX(-1)' : ''; } },
     refresh() { setFrame(frameName); },
@@ -271,15 +271,22 @@ export function initCat(app, wm, desktop) {
   el.addEventListener('click', (e) => { e.stopPropagation(); pet(); });
   el.addEventListener('yawn', () => { if (!el.hidden) { say('하암~', 1800); play('yawn'); } });
 
+  // stop whatever the cat was doing (nap on a window, walk, hop…)
+  function reset() {
+    clearTimers();
+    el.classList.remove('napping', 'hop', 'wiggle', 'reaching', 'shake', 'jumping', 'squish');
+    napWin = null;
+  }
   // place on the floor (desktop) or on the dock (phone)
   function home() {
     el.hidden = !on('cat') || (isPhone() && !on('cat_phone'));
     el.title = X('cat_name');
     el.setAttribute('aria-label', `${X('cat_name')} 쓰다듬기`);
     document.body.classList.toggle('cat-phone', isPhone() && !el.hidden);   // phone windows leave it a gap above the dock
-    if (el.hidden) { clearTimers(); return; }
+    if (el.hidden) { reset(); state = 'sit'; return; }
     const fx = isPhone() ? desktop.clientWidth - W - 10 : Math.min(desktop.clientWidth - 150, Math.max(80, x || desktop.clientWidth * 0.6));
-    if (state === 'nap' && !isPhone()) return;
+    if (state === 'nap' && !isPhone() && anim) return;     // still napping on a window: leave it be
+    reset();
     place(fx, floorY());
     flip = isPhone();
     sit();

@@ -41,7 +41,9 @@ export function initSaver(app, wm, cat) {
     }
     wake();
   }
-  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) addEventListener(ev, activity, { capture: true, passive: false });
+  for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, activity, { capture: true });
+  // scrolling must stay passive (no scroll jank on phones); the wake tap is caught by pointerdown
+  for (const ev of ['wheel', 'touchstart']) addEventListener(ev, () => activity(null), { capture: true, passive: true });
   addEventListener('pointermove', (e) => { if (e.movementX || e.movementY) activity(null); }, { capture: true, passive: true });
   bus.on('activity', () => { last = Date.now(); });
   bus.on('saver-now', () => { last = Date.now() - (X('saver_typing_min') ?? 3) * 60e3; setTimeout(check, 50); });
@@ -157,6 +159,8 @@ export function initSaver(app, wm, cat) {
       if (stage !== 'stars') return;
       poem.replaceChildren(h('span', {}, POEM[i % POEM.length]));
       sky.append(h('i', { class: 'st big new', style: `left:${rand(8, 92)}%;top:${rand(6, 55)}%` }));
+      const big = sky.querySelectorAll('.st.big');                       // keep the sky from filling up overnight
+      for (let k = 0; k < big.length - 24; k++) big[k].remove();
       i++;
     };
     line();

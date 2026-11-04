@@ -120,7 +120,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     });
   }
 
-  function focus(key, { silent = false } = {}) {
+  function focus(key, { silent = false, keep = false } = {}) {
     const win = wins.get(key);
     if (!win) return;
     if (win.minimized) restore(key, { silent: true });
@@ -131,7 +131,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
       closeProps();
     }
     win.el.style.zIndex = String(++z);
-    win.view.onFocus?.();
+    if (!keep) win.view.onFocus?.();            // keep: raised by keyboard focus — don't re-render under it
     if (!silent) onActiveChange?.(win);
   }
 
@@ -139,7 +139,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     if (wins.has(key)) { focus(key, { silent }); return wins.get(key); }
     const view = factory();
     const titleEl = h('h2', { id: `wt-${key.replace(/[^a-z0-9]/gi, '')}` }, view.title);
-    const el = h('section', { class: 'win', 'aria-labelledby': titleEl.id, dataset: { key } },
+    const el = h('section', { class: 'win', 'aria-labelledby': titleEl.id, tabindex: '-1', dataset: { key } },
       h('div', { class: 'win-title' },
         view.closable === false ? h('span', { class: 'win-title-pad' })
           : h('button', { type: 'button', class: 'win-close', 'aria-label': `${view.title} 닫기`, onclick: () => close(key) }),
@@ -154,6 +154,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
       titleEl.textContent = t;
       if (win.trayBtn) win.trayBtn.lastChild.textContent = t;
       win.el.querySelector('.win-min')?.setAttribute('aria-label', `${t} 접어 두기`);
+      win.el.querySelector('.win-close')?.setAttribute('aria-label', `${t} 닫기`);
     };
     wins.set(key, win);
     layer.append(el);
@@ -161,8 +162,11 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     makeDraggable(win);
     makeResizable(win);
     el.addEventListener('pointerdown', () => { if (active !== key) focus(key); }, true);
+    el.addEventListener('focusin', () => { if (active !== key && wins.has(key)) focus(key, { keep: true }); });   // keyboard users raise windows too
     view.mount?.();
     focus(key, { silent });
+    // move keyboard focus into the new window (views that focus a field do so a tick later)
+    if (!silent && (document.activeElement === document.body || document.activeElement?.closest?.('.win'))) el.focus({ preventScroll: true });
     return win;
   }
 
@@ -209,13 +213,14 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     closeProps();
     win.trayBtn?.remove();
     if (tray && !tray.children.length) tray.hidden = true;
+    const hadFocus = win.el.contains(document.activeElement);
     win.view.unmount?.();
     win.el.remove();
     wins.delete(key);
     if (active === key) {
       active = null;
       const next = [...wins.values()].filter(w => !w.minimized).sort((a, b) => (+b.el.style.zIndex) - (+a.el.style.zIndex))[0];
-      if (next) focus(next.key); else onActiveChange?.(null);
+      if (next) { focus(next.key); if (hadFocus) next.el.focus({ preventScroll: true }); } else onActiveChange?.(null);
     }
   }
 

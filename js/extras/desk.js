@@ -38,9 +38,9 @@ export function deadlineEl() {
     el.hidden = !p;
     if (!p) return;
     const e = kst(new Date(p.end - 1));
-    el.title = `마감: ${e.m}.${e.d} (${WEEKDAY[e.wd]}) 밤 12시`;
+    el.title = `마감: ${e.m}월 ${e.d}일(${WEEKDAY[e.wd]}) 밤 12시 (24:00)`;
     if (p.left === 0) el.textContent = '마감!';
-    else if (isPhone()) el.textContent = `D-${p.d}`;
+    else if (isPhone()) el.textContent = p.d ? `마감 D-${p.d}` : '마감 D-day';
     else el.textContent = `마감까지 ${p.d ? `${p.d}일 ` : ''}${p2(p.hh)}:${p2(p.mm)}:${p2(p.ss)}`;
   };
   draw();
@@ -160,7 +160,7 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
   const trashIcon = h('button', { type: 'button', class: 'icon extra trash', title: '휴지통 — 안 쓰고 놓은 바통' },
     trashBadge, pixel(ICONS.trash, 40, 16), h('span', {}, '휴지통'));
   trashIcon.addEventListener('dblclick', () => bus.emit('trash-dblclick', { el: trashIcon }));
-  trashIcon.addEventListener('click', () => { if (!fun('fun_trash')) app.go('/about'); });
+  trashIcon.addEventListener('click', (e) => { if (!fun('fun_trash') || e.detail === 0) app.go('/about'); });   // keyboard Enter always opens it
 
   const sticky = h('aside', { class: 'sticky', hidden: true, 'aria-label': '오늘의 첫 문장' });
 
@@ -172,7 +172,7 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
   async function refreshTrash() {
     if (!on('trash')) return;
     try {
-      const a = await api.getAbout();
+      const a = await api.getCounters();          // two numbers, no table scans
       trashBadge.textContent = a.trash;
       trashBadge.hidden = !a.trash;
     } catch { /* ignore */ }
@@ -232,7 +232,7 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
     return [
       ['속성 보기', () => li.querySelector('.who')?.click()],
       on('stamps') ? ['도장 찍기', () => li.querySelector('.who')?.click(), '›'] : null,
-      ['이 줄 링크 복사', () => navigator.clipboard?.writeText(`${location.origin}${location.pathname}#/story/${storyId}`).catch(() => {})],
+      ['이야기 링크 복사', () => navigator.clipboard?.writeText(`${location.origin}${location.pathname}#/story/${storyId}`).catch(() => {})],
       on('memo') ? '-' : null,
       on('memo') ? ['메모장에 옮겨 적기', () => { app.go('/memo'); setTimeout(() => wm.get('memo')?.view.append?.(`“${text}”`), 50); }] : null,
     ].filter(Boolean);
@@ -259,7 +259,6 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
   const refreshAll = () => { placeIcons(); refreshTrash(); refreshSticky(); };
   bus.on('settings', refreshAll);
   api.watch(['list'], () => { refreshTrash(); });
-  setInterval(refreshTrash, 60e3);
   refreshAll();
   return { trashIcon, sticky, closeMenu };
 }

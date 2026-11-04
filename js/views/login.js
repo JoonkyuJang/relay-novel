@@ -29,13 +29,16 @@ export function loginView(app, { reason = '' } = {}) {
   const form = h('form', { class: 'login', novalidate: true },
     h('div', { class: 'brand' }, icon('logo', 40),
       h('div', {}, h('div', { class: 'word' }, '연문회 OS'), h('div', { class: 'muted' }, '릴레이 소설 · 2026 가을'))),
+    h('p', { style: 'margin:0' }, `한 사람이 한 줄씩 이어 써요. ${app.settings?.max_lines ?? 20}줄이 모이면 한 편이 완성돼요.`),
     msg,
     h('div', { class: 'label' }, h('label', { for: 'lg-name' }, '이름'), name),
     h('div', { class: 'label' }, h('label', { for: 'lg-sid' }, '학번'), sid),
     h('div', { class: 'row' }, h('span', { id: 'lg-crt' }, '화면 효과 (CRT)'),
       h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-crt' }, crtOn, crtOff)),
     h('p', { class: 'muted', style: 'margin:0;line-height:18px' },
-      '학번은 같은 사람인지 확인하는 데만 쓰여요. 입력한 정보는 이 기기에만 저장되고, 언제든 메뉴에서 로그아웃할 수 있어요.'),
+      (app.settings?.show_student_id ?? true)
+        ? '이름과 학번은 쓴 줄과 함께 저장되고, 줄의 속성 창에서 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'
+        : '이름과 학번은 쓴 줄과 함께 저장돼요. 다른 사람에게는 이름만 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'),
     h('div', { class: 'actions', style: 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap' },
       h('button', { type: 'button', class: 'btn', onclick: () => { api.setGuest(); app.afterLogin(); } }, '둘러보기 (읽기만)'),
       h('button', { type: 'submit', class: 'btn btn-primary' }, '들어가기')));

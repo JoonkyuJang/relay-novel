@@ -29,7 +29,8 @@ export function storyView(app, storyId) {
   let revealedId = null;       // line whose 속성 window is open
   let othersTyping = null;     // live character count of whoever holds the baton
   let notifyFree = false;
-  let unwatch = null, ticker = null, typing = null;
+  let unwatch = null, ticker = null, typing = null, ro = null;
+  let closed = false, claiming = false, linesSig = null;
   let gridMode = api.prefs.get('gridbox') == null ? !!X('grid_box_default') : api.prefs.get('gridbox') === '1';
   const serverNow = () => Date.now() + clockOffset;
 
@@ -55,12 +56,15 @@ export function storyView(app, storyId) {
       ticker = setInterval(tick, 1000);
       addEventListener('pagehide', onPageHide);
       if (on('typing_count')) typing = api.typingChannel(storyId, (n) => { othersTyping = n; showTyping(); });
-      new ResizeObserver(() => placeTicks()).observe(scroll);
+      ro = new ResizeObserver(() => placeTicks());
+      ro.observe(scroll);
     },
     onFocus() { if (story && mode === 'idle') renderFoot(); },
-    onSettings() { if (story) renderAll(); },
+    // never rebuild the writing box (it would drop the IME composition and close the phone keyboard)
+    onSettings() { if (!story) return; linesSig = null; if (mode === 'writing') { renderBar(); renderLines(); } else renderAll(); },
     unmount() {
-      unwatch?.(); clearInterval(ticker); typing?.close();
+      closed = true;
+      unwatch?.(); clearInterval(ticker); typing?.close(); ro?.disconnect();
       removeEventListener('pagehide', onPageHide);
       if (baton) api.releaseBaton(storyId, baton.token).catch(() => {});
     },
@@ -95,7 +99,7 @@ export function storyView(app, storyId) {
     const full = isFull(l);
     const li = h('li', { class: `line${pads ? ' has-pad' : ''}${isNew ? ' is-new' : ''}${revealedId === l.id ? ' is-revealed' : ''}`, dataset: { id: l.id } });
     const who = h('button', {
-      type: 'button', class: 'who', 'aria-label': `${l.position}번 줄 쓴 사람 보기`, 'aria-expanded': 'false',
+      type: 'button', class: 'who', 'aria-label': on('stamps') ? `${l.position}번 줄 속성 · 도장 찍기` : `${l.position}번 줄 쓴 사람 보기`, 'aria-expanded': 'false',
     }, icon('person', 16));
     attachReveal(who, () => {
       const n = api.countChars(l.text);
@@ -125,6 +129,12 @@ export function storyView(app, storyId) {
   }
 
   function renderLines() {
+    // nothing visible changed (the 20 s safety refresh, a bump for someone else's baton…): keep the DOM,
+    // so text selection and an open 속성 window survive
+    const sig = JSON.stringify([story.status, story.writing, mode, revealedId, othersTyping != null,
+      story.lines.map(l => [l.id, l.text, l.edited, l.removed]), stamps]);
+    if (sig === linesSig) return;
+    linesSig = sig;
     const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60;
     const first = known === null;
     const ids = new Set(story.lines.map(l => l.id));
@@ -132,7 +142,7 @@ export function storyView(app, storyId) {
     if (story.status === 'open' && story.writing && mode !== 'writing') {
       items.push(h('li', { class: 'line pending' },
         h('span', { class: 'line-no' }, pad2(story.line_count + 1)),
-        h('span', { class: 'line-text' }, '▒▒▒▒▒▒ ', h('span', { 'data-typing': '' }, pendingText()), h('span', { class: 'dots' }, '…')), h('span')));
+        h('span', { class: 'line-text' }, h('span', { 'aria-hidden': 'true' }, '▒▒▒▒▒▒ '), h('span', { 'data-typing': '' }, pendingText()), h('span', { class: 'dots', 'aria-hidden': 'true' }, '…')), h('span')));
     }
     if (!first) {
       const added = story.lines.filter(l => !known.has(l.id));
@@ -180,7 +190,7 @@ export function storyView(app, storyId) {
     const finishedByMe = lastResult?.result === 'accepted' && lastResult.story_status === 'completed';
     return [
       h('p', { style: 'margin:0' }, finishedByMe
-        ? '마지막 줄을 썼어요. 이야기가 완결되었습니다!'
+        ? '마지막 줄을 썼어요. 이야기가 완결됐어요!'
         : `${story.line_count}줄로 완결된 이야기예요. 함께 써 주셔서 고마워요.`),
       h('div', { class: 'actions', style: 'justify-content:flex-start' },
         on('reading') ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.go(`/read/${storyId}`) }, '▶ 낭독회 열기') : null,
@@ -203,7 +213,7 @@ export function storyView(app, storyId) {
         h('span', {}, lastResult.reason === 'baton_taken'
           ? '예약 시간이 지나 다른 사람이 이 자리를 쓰는 중이었어요.'
           : '같은 자리에 다른 줄이 먼저 올라왔어요.'),
-        h('span', {}, '쓰신 줄은 관리자 확인함에 보관했어요:'),
+        h('span', {}, '쓰신 줄은 버리지 않고 관리자에게 보냈어요:'),
         h('span', { class: 'text' }, lastResult.text),
         h('div', { class: 'actions' },
           h('button', { type: 'button', class: 'btn', onclick: () => { api.setDraft(storyId, ''); mode = 'idle'; lastResult = null; renderAll(); } }, '그만두기'),
@@ -222,19 +232,22 @@ export function storyView(app, storyId) {
     } else if (lastResult?.result === 'accepted') {
       status.append(h('span', {}, '줄이 올라갔어요. 고마워요!'));
     } else {
-      status.append(h('span', { class: 'muted' }, `${story.line_count + 1}번째 줄을 이어 쓸 차례예요.`));
+      const min = Math.max(1, Math.round((app.settings?.baton_seconds ?? 300) / 60));
+      status.append(h('span', { class: 'muted' }, `${story.line_count + 1}번째 줄이 비어 있어요. '이어 쓰기'를 누르면 ${min}분 동안 내 자리로 맡아 둬요.`));
     }
+    const closedNow = app.settings?.submissions_open === false;
     const notifyBtn = story.writing && on('notify_free')
       ? h('button', { type: 'button', class: 'btn', 'aria-pressed': String(notifyFree), onclick: () => { notifyFree = !notifyFree; renderFoot(); } },
           notifyFree ? '✓ 자리 나면 알려 드려요' : '자리 나면 알려 주기')
       : null;
     return [
       status,
-      message ? h('div', { class: 'notice bad', role: 'alert' }, message) : null,
+      message ? h('div', { class: 'notice bad', role: 'alert' }, message)
+        : closedNow ? h('div', { class: 'notice warn' }, errorText({ code: 'submissions_closed' })) : null,
       h('div', { class: 'actions', style: 'align-items:center' },
         ident
           ? [h('span', { class: 'muted', style: 'margin-right:auto' }, `${ident.name} 님으로 써요`), notifyBtn,
-             h('button', { type: 'button', class: 'btn btn-primary', onclick: claim }, '이어 쓰기')]
+             h('button', { type: 'button', class: 'btn btn-primary', onclick: claim, disabled: closedNow }, '이어 쓰기')]
           : [notifyBtn, h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.requireLogin('글을 쓰려면 로그인해 주세요.', route) }, '로그인하고 이어 쓰기')]),
     ];
   }
@@ -266,7 +279,7 @@ export function storyView(app, storyId) {
   }
 
   function writingFoot() {
-    const ta = h('textarea', { class: 'field', rows: 2, id: `ta-${storyId}`, value: api.getDraft(storyId), maxlength: baton.max_chars * 2 });
+    const ta = h('textarea', { class: 'field', rows: 2, id: `ta-${storyId}`, value: api.getDraft(storyId), maxlength: baton.max_chars * 2, enterkeyhint: 'send', 'aria-describedby': `hint-${storyId}` });
     const counter = h('span', { class: 'counter' });
     const submitBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: submit }, '올리기');
     let lastKey = 0;
@@ -296,10 +309,11 @@ export function storyView(app, storyId) {
         h('span', {}, `이 줄이 이야기의 마지막 줄이에요. ${story.max_lines}줄의 끝을 맺어 주세요.`)) : null,
       h('div', { class: 'status-line' }, icon('hourglass', 18), h('b', {}, `${baton.position}번째 줄`),
         h('span', { style: 'flex:1' }), h('span', {}, '남은 시간 '), h('b', { 'data-countdown': 'mine' }, '')),
-      h('div', { 'data-warnings': '' }),
-      h('label', { class: 'label', for: ta.id }, h('span', { class: 'label-row' }, h('span', {}, '내 줄 ', toggleGrid),
+      h('div', { 'data-warnings': '', role: 'status' }),
+      h('div', { class: 'label' }, h('span', { class: 'label-row' }, h('span', {}, h('label', { for: ta.id }, '내 줄'), ' ', toggleGrid),
         counter)),
       gridMode ? gridBox(ta, baton.max_chars) : ta,
+      h('span', { class: 'faint compose-hint', id: `hint-${storyId}` }, 'Enter를 누르면 바로 올라가요. 올린 뒤에는 고칠 수 없어요.'),
       message ? h('div', { class: 'notice bad', role: 'alert' }, message) : null,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: cancel }, '취소'), submitBtn),
     ];
@@ -378,6 +392,7 @@ export function storyView(app, storyId) {
     if (!on('stamps')) return;
     try {
       stamps = await api.getStoryStamps(storyId, app.identity()?.studentId ?? null);
+      if (closed) return;
       for (const li of list.querySelectorAll('.line[data-id]')) {
         const pad = li.querySelector('.stamp-pad');
         if (pad) fillPad(pad, stamps[li.dataset.id]?.marks);
@@ -391,6 +406,7 @@ export function storyView(app, storyId) {
       const [s] = await Promise.all([api.getStory(storyId), on('stamps')
         ? api.getStoryStamps(storyId, app.identity()?.studentId ?? null).then(x => { stamps = x; }).catch(() => {})
         : null]);
+      if (closed) return;
       const prevMode = mode, prevWriting = story?.writing, prevStatus = story?.status;
       story = s;
       clockOffset = Date.parse(s.server_now) - Date.now();
@@ -415,9 +431,14 @@ export function storyView(app, storyId) {
   async function claim() {
     const ident = app.identity();
     if (!ident) { app.requireLogin('글을 쓰려면 로그인해 주세요.', route); return; }
+    if (claiming) return;
+    claiming = true;
     message = '';
+    foot.querySelectorAll('button').forEach(b => { b.disabled = true; });
     try {
-      baton = await api.claimBaton(storyId, ident);
+      const b = await api.claimBaton(storyId, ident);
+      if (closed) { api.releaseBaton(storyId, b.token).catch(() => {}); return; }   // window closed meanwhile
+      baton = b;
       clockOffset = Date.parse(baton.server_now) - Date.now();
       mode = 'writing';
       lastResult = null;
@@ -429,7 +450,7 @@ export function storyView(app, storyId) {
       if (e.code === 'story_closed') mode = 'done';
       renderFoot();
       if (e.code === 'baton_held' || e.code === 'story_closed') refresh();
-    }
+    } finally { claiming = false; }
   }
 
   let submitting = false;

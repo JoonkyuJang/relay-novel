@@ -12,7 +12,7 @@ import { helpView } from './views/help.js';
 import { adminView, adminStoryView } from './views/admin.js';
 import { readingView } from './views/reading.js';
 import { setExtras, on, bus } from './extras/extras.js';
-import { initDayNight, phaseButton, applySky } from './extras/daynight.js';
+import { initDayNight, phaseButton } from './extras/daynight.js';
 import { initDesk, deadlineEl, soundButton, memoView, aboutView } from './extras/desk.js';
 import { initCat } from './extras/cat.js';
 import { initSaver } from './extras/saver.js';
@@ -92,7 +92,10 @@ const NAV = [
   { route: '/guestbook', label: '방명록',      short: '방명록',   icon: 'book' },
 ];
 
-function currentRoute() { return decodeURIComponent(location.hash.replace(/^#/, '')) || '/stories'; }
+function currentRoute() {
+  try { return decodeURIComponent(location.hash.replace(/^#/, '')) || '/stories'; }
+  catch { return '/stories'; }               // a cut-off link like #/story/%E
+}
 
 function resolve(route) {
   const m = route.match(/^\/story\/([0-9a-f-]{36})$/i);
@@ -196,7 +199,7 @@ function renderMenubar() {
     presenceEl,
     api.hasEntered()
       ? ident
-        ? [h('span', {}, `${ident.name} 님`), h('button', { type: 'button', onclick: logout }, '로그아웃')]
+        ? [h('span', { class: 'menu-name' }, `${ident.name} 님`), h('button', { type: 'button', onclick: logout }, '로그아웃')]
         : [h('span', { class: 'muted' }, '손님'), h('button', { type: 'button', onclick: () => app.requireLogin('', currentRoute()) }, '로그인')]
       : null,
     soundButton(renderMenubar),
@@ -229,9 +232,15 @@ function renderNav() {
 
 // ------------------------------------------------------------ settings + presence
 
+let settingsSig = null;
 async function loadSettings() {
   try {
-    app.settings = await api.getSettings();
+    const next = await api.getSettings();
+    const { server_now: _now, ...rest } = next;
+    const sig = JSON.stringify(rest);
+    if (sig === settingsSig) return;          // nothing changed: don't re-render every window
+    settingsSig = sig;
+    app.settings = next;
     setExtras(app.settings.extras);
     // first visit: CRT follows the admin's default until the person picks
     if (api.prefs.get('crt') == null) { app.crt = on('crt_default'); document.body.classList.toggle('crt', app.crt); }
@@ -258,7 +267,6 @@ const cat = initCat(app, wm, desktop);
 initSaver(app, wm, cat);
 initFun(app, wm, { cat, clockEl });
 bus.on('theme', () => renderMenubar());
-setInterval(() => { applySky(); }, 60e3);
 loadSettings();
 api.watch(['settings'], loadSettings);
 

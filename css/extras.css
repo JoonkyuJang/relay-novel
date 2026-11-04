@@ -164,7 +164,7 @@ a.sticky-src:hover { text-decoration: underline; }
 .sky-layer[data-phase="dusk"]::after { background-image: radial-gradient(rgba(194,85,61,0.22) 1px, transparent 1.3px); }
 .sky-layer[data-phase="night"] { background: #1F2B47 linear-gradient(to bottom, #141D33 0%, rgba(31,43,71,0) 70%); }
 .sky-layer[data-phase="night"]::after { background-image: radial-gradient(rgba(255,249,239,0.10) 1px, transparent 1.3px); }
-.sky-orb { position: absolute; transform: translate(-50%, -50%); transition: left 60s linear, top 60s linear; color: #E9A04A; }
+.sky-orb { position: absolute; transform: translate(-50%, -50%); color: #E9A04A; }
 .phase-dusk .sky-orb { color: #C8553D; }
 .phase-night .sky-orb { color: #F3EBDD; }
 .desktop { z-index: 1; }
@@ -239,7 +239,7 @@ body.phase-night .bootlog .hi { color: #F3EBDD; }
 /* ------------------------------------------------------------ 낭독회 */
 
 .read-stage { flex: 1; min-height: 0; overflow: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; background: var(--desk); }
-.read-prev { font-family: var(--text); font-size: 16px; line-height: 24px; color: #9AA3B8; min-height: 24px; }
+.read-prev { font-family: var(--text); font-size: 16px; line-height: 24px; color: var(--pencil); min-height: 24px; }
 .read-row { display: flex; gap: 14px; align-items: flex-start; }
 .read-no { flex: none; width: 34px; padding-top: 12px; font-size: 11px; color: var(--faint); }
 .read-cur { font-family: var(--text); font-size: 32px; line-height: 44px; word-break: keep-all; overflow-wrap: anywhere; }
@@ -272,7 +272,7 @@ body.phase-night .bootlog .hi { color: #F3EBDD; }
 
 /* 호박색 단말기: everything in one amber on black */
 body.amber {
-  --desk: #120C04; --paper: #1B1307; --field: #1B1307; --cream: #120C04; --ink: #FFB000; --pencil: #C98A00; --faint: #A56F00; --rule: #5E3F00;
+  --desk: #120C04; --paper: #1B1307; --field: #1B1307; --cream: #120C04; --ink: #FFB000; --pencil: #C98A00; --faint: #C98A00; --rule: #5E3F00;
   --stamp: #FFB000; --red: #FFB000; --sky-bg: #2A1D08; --sky: #FFB000; --grass-bg: #2A1D08; --grass: #FFB000; --pink-bg: #2A1D08; --pink: #FFD266; --stone-bg: #2A1D08; --stone: #FFB000;
   --shadow: 4px 4px 0 #5E3F00;
   background: #120C04 radial-gradient(rgba(255,176,0,0.10) 1px, transparent 1.3px) 0 0 / 6px 6px;
@@ -320,6 +320,21 @@ body.amber .grid-cells, body.amber .grid-cells span { border-color: #5E3F00; }
   .props.sheet .stamp-btn svg { width: 40px; height: 40px; }
   .props.sheet .stamp-btn.is-mine { border-color: #C23B32; }
   .tray, .sticky, .icon.extra { display: none !important; }
+  .win-min { display: none; }
+  .props.sheet { padding-bottom: env(safe-area-inset-bottom); }                                  /* nothing to fold on a phone */
+  .menu-name { max-width: 5.5em; }
+  .who { width: 44px; height: 36px; margin: -3px 0; }       /* bigger hit area, same row height */
+  .who-slot { width: 44px; }
+  .line, .line.has-pad { grid-template-columns: 38px minmax(0, 1fr) 44px; }
+  .line { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }   /* long-press opens our menu */
+  .ctx-item { min-height: 44px; align-items: center; }
+  .menubar button, .menubar a.logo { min-height: 40px; }
+  .read-ctrl select.field, .read-ctrl .btn { min-height: 44px; }
+  .compose-hint { font-size: 12px; }
+  /* writing on a phone: give the keyboard the room (dock and cat step aside while a field has focus) */
+  body:has(.win-foot textarea:focus) .dock, body:has(.win-foot textarea:focus) .cat-layer { display: none; }
+  body:has(.win-foot textarea:focus) .desktop { bottom: 0; }
+  body.cat-phone:has(.win-foot textarea:focus) .win:not(.amber-toast) { bottom: 10px; }
   .win.amber-toast { left: 10px !important; right: 10px; top: auto !important; bottom: 74px; width: auto !important; height: auto !important; }
   body.cat-phone:not(.not-entered) .win { bottom: 48px; }
   .not-entered .cat-layer, .not-entered .sky-orb { display: none; }
@@ -337,4 +352,12 @@ body.amber .grid-cells, body.amber .grid-cells span { border-color: #5E3F00; }
 
 @media (prefers-reduced-motion: reduce) {
   .cat, .cat-float, .sky-orb, .sky-layer, .paper-ball, .eagle, .star-fall i, .thunk, .seal-drop, .win.shake { animation: none !important; transition: none !important; }
+  .line.pending .dots, .read-bars i, .win.flash, .cat.napping::after, .saver *, .saver, .icon.trash.tipping svg, .blink-caret,
+  .sky-stars, .stamp-btn svg { animation: none !important; transition: none !important; }
 }
+
+/* ------------------------------------------------------------ audit refinements */
+
+.win:focus { outline: none; }
+.compose-hint { display: block; font-size: 11px; margin-top: -2px; }
+.menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 9em; }

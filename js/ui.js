@@ -119,13 +119,15 @@ function scheduleClose() {
 // Writer reveal for `anchor`: hover shows it on desktop (click pins it); tap/click/Enter
 // toggles it everywhere. getSpec() -> { title, rows: [[label, value]], onOpen?, onClose? }
 export function attachReveal(anchor, getSpec) {
-  anchor.addEventListener('click', () => {
+  anchor.addEventListener('click', (e) => {
     clearTimeout(hoverTimer);
     if (openProps?.anchor === anchor) {
       if (!openProps.pinned && canHover()) { openProps.pinned = true; return; }   // hovered -> pin
       closeProps(); return;
     }
     showProps(anchor, getSpec(), true);
+    // opened from the keyboard (Enter/Space): move focus in, so the stamp buttons are reachable
+    if (e.detail === 0) openProps?.el.querySelector('button')?.focus();
   });
   anchor.addEventListener('pointerenter', (e) => {
     if (e.pointerType !== 'mouse' || !canHover()) return;
@@ -155,8 +157,11 @@ const MESSAGES = {
   story_limit:         (d) => `이야기는 한 사람당 ${d?.max}개까지 시작할 수 있어요.`,
   story_not_found:     () => '이야기를 찾을 수 없어요.',
   story_closed:        () => '이미 완결된 이야기예요.',
-  baton_held:          () => '다른 사람이 이어 쓰는 중이에요. 잠시 후 다시 시도해 주세요.',
-  person_limit:        (d) => `이 이야기에는 한 사람당 ${d?.max}줄까지 쓸 수 있어요.`,
+  baton_held:          (d) => {
+    const min = d?.expires_at ? Math.max(1, Math.ceil((Date.parse(d.expires_at) - Date.now()) / 60000)) : null;
+    return `다른 사람이 이어 쓰는 중이에요.${min ? ` 늦어도 ${min}분 안에 자리가 나요.` : ' 잠시 후 다시 해 주세요.'}`;
+  },
+  person_limit:        (d) => `이 이야기에는 한 사람당 ${d?.max}줄까지 쓸 수 있어요. 다른 이야기를 이어 써 주세요.`,
   consecutive:         () => '바로 앞 줄을 쓴 사람은 연달아 쓸 수 없어요. 다른 사람이 한 줄 이은 뒤에 다시 써 주세요.',
   invalid_parent:      () => '이야기가 바뀌었어요. 새로고침해 주세요.',
   too_many_conflicts:  () => '관리자 확인을 기다리는 줄이 너무 많아요.',
@@ -177,13 +182,16 @@ const MESSAGES = {
   feature_off:         () => '지금은 꺼져 있는 기능이에요.',
   invalid_kind:        () => '알 수 없는 도장이에요.',
   invalid_settings:    () => '설정 값을 확인해 주세요.',
+  not_your_stamp:      () => '다른 기기에서 찍은 도장은 그 기기에서만 지울 수 있어요.',
+  stamp_limit:         () => '이 줄에는 도장을 더 찍을 수 없어요.',
+  unknown:             () => '알 수 없는 오류가 생겼어요. 잠시 후 다시 해 주세요.',
 };
 
 export function errorText(err) {
   const f = MESSAGES[err?.code];
   if (f) return f(err.detail);
   console.error(err);
-  return `오류가 발생했어요 (${err?.code ?? err?.message ?? 'unknown'})`;
+  return MESSAGES.unknown();
 }
 
 // ------------------------------------------------------------ 연문회 OS dialogs (confirm / prompt)
@@ -212,7 +220,7 @@ export function osDialog({ title = '연문회 OS', message = '', input = null, o
     const modal = h('div', { class: 'modal', onclick: (e) => { if (e.target === modal) done(field ? null : false); } }, box);
     function onKey(e) {
       if (e.key === 'Escape') { e.preventDefault(); done(field ? null : false); }
-      else if (e.key === 'Enter' && !e.isComposing && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); okBtn.click(); }
+      else if (e.key === 'Enter' && !e.isComposing && e.target === field && field.tagName !== 'TEXTAREA') { e.preventDefault(); okBtn.click(); }
       else if (e.key === 'Tab') {                          // keep focus inside the dialog
         const f = [...box.querySelectorAll('button, input, textarea')];
         const i = f.indexOf(document.activeElement);

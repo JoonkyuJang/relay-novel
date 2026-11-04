@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import { h, relTime, errorText } from '../ui.js';
 import { on, manuscript } from '../extras/extras.js';
-import { seal, stampSvg, KINDS } from '../extras/stamps.js';
+import { seal, stampSvg, KINDS, NAMES } from '../extras/stamps.js';
 
 function chip(s) {
   if (s.status === 'completed') return h('span', { class: 'chip grass' }, '완결');
@@ -43,7 +43,7 @@ export function storiesView(app) {
         h('a', { href: `#/story/${s.id}`, class: 'done-card-title' }, name),
         h('span', { class: 'muted' }, meta),
         h('div', { class: 'done-card-row' },
-          info && on('stamps') ? KINDS.map(k => h('span', { class: 'tot', title: `${k}` }, stampSvg(k, { size: 18 }), h('span', {}, info.stamps?.[k] ?? 0))) : null,
+          info && on('stamps') ? KINDS.map(k => h('span', { class: 'tot', title: NAMES[k], 'aria-label': `${NAMES[k]} ${info.stamps?.[k] ?? 0}개` }, stampSvg(k, { size: 18 }), h('span', { 'aria-hidden': 'true' }, info.stamps?.[k] ?? 0))) : null,
           h('span', { style: 'flex:1' }),
           on('reading') ? h('a', { href: `#/read/${s.id}`, class: 'btn btn-sm' }, '▶ 낭독회') : null)),
       h('a', { href: `#/story/${s.id}`, class: 'done-card-seal', tabindex: '-1', 'aria-hidden': 'true' }, seal(78, -7)));
@@ -66,7 +66,7 @@ export function storiesView(app) {
       rows.replaceChildren(...[
         open.length ? h('div', { class: 'drawer-sep' }, '진행 중') : null,
         ...open.map(row),
-        done.length ? h('div', { class: 'drawer-sep' }, '완결 · 완결된 순서') : null,
+        done.length ? h('div', { class: 'drawer-sep' }, '완결 · 최근 완결 순') : null,
         ...done.map(d => card(d, cards[d.id]))].filter(Boolean));
     } catch (e) {
       rows.replaceChildren(h('div', { class: 'empty' }, errorText(e)));

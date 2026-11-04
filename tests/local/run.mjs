@@ -110,7 +110,7 @@ await test('baton: claim, held by other, person_limit for starter, accept clears
   assert.equal(b.position, 2); assert.equal(b.is_final, false);
   await expectErr(rpc('claim_baton', { p_story_id: S1, ...who(11) }), 'baton_held');
   const again = await rpc('claim_baton', { p_story_id: S1, ...who(10), p_client: 'other-device' });
-  assert.ok(again.token);
+  assert.equal(again.token, b.token); assert.equal(again.expires_at, b.expires_at);   // re-claim can't extend
   const list = await rpc('list_stories');
   assert.equal(list.find(x => x.id === S1).writing, true);
   const r = await rpc('submit_line', { p_story_id: S1, p_parent_id: b.parent_id, p_text: '둘째 줄', ...who(10), p_token: again.token });
@@ -430,9 +430,13 @@ await test('stamps: one of each kind per person, toggle off, counts, mine, posit
   const res = await Promise.allSettled(Array.from({ length: 8 }, () =>
     rpc('toggle_stamp', { p_line_id: line, p_kind: 'cur', ...who(6003) })));
   assert.ok(res.every(r => r.status === 'fulfilled'));          // even toggles → back to off
-  let all = await rpc('get_story_stamps', { p_story_id: id, p_student_id: '2026 006001' });
+  let all = await rpc('get_story_stamps', { p_story_id: id, p_student_id: '2026 006001', p_client: 'client-6001' });
   assert.deepEqual(all[line].counts, { sun: 2, laugh: 1, cur: 0 });
   assert.deepEqual(all[line].mine.sort(), ['laugh', 'sun']);
+  // the 학번 alone doesn't reveal or remove someone's stamps
+  assert.deepEqual((await rpc('get_story_stamps', { p_story_id: id, p_student_id: '2026006001' }))[line].mine, []);
+  assert.deepEqual((await rpc('get_story_stamps', { p_story_id: id, p_student_id: '2026006001', p_client: 'x' }))[line].mine, []);
+  await expectErr(rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6001), p_client: 'someone-else' }), 'not_your_stamp');
   for (const [k, x, y, r] of all[line].marks) { assert.ok(['sun', 'laugh'].includes(k)); assert.ok(x >= 0 && x <= 1 && y >= 0 && y <= 1 && Math.abs(r) <= 25); }
   const off = await rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6001) });
   assert.deepEqual([off.stamped, off.counts.sun], [false, 1]);
@@ -447,6 +451,25 @@ await test('stamps: one of each kind per person, toggle off, counts, mine, posit
   await admin('admin_update_settings', { p: { extras: { stamps: false } } });
   await expectErr(rpc('toggle_stamp', { p_line_id: line, p_kind: 'sun', ...who(6009) }), 'feature_off');
   await admin('admin_update_settings', { p: { extras: { stamps: true } } });
+});
+
+await test('hardening: one baton per person, export hides 학번 when hidden, counters, extras ranges', async () => {
+  const a = (await rpc('create_story', { p_title: 'A', p_text: '하나', ...who(9100) })).story_id;
+  const b = (await rpc('create_story', { p_title: 'B', p_text: '하나', ...who(9101) })).story_id;
+  await rpc('claim_baton', { p_story_id: a, ...who(9102) });
+  await rpc('claim_baton', { p_story_id: b, ...who(9102) });
+  assert.equal((await rpc('get_story', { p_story_id: a })).writing, false, 'claiming B lets go of A');
+  assert.equal((await rpc('get_story', { p_story_id: b })).writing, true);
+  await admin('admin_release_baton', { p_story_id: b });
+  await admin('admin_update_settings', { p: { show_student_id: false } });
+  const ex = await rpc('export_stories');
+  assert.ok(ex.stories.every(st => st.lines.every(l => l.student_id == null)));
+  await admin('admin_update_settings', { p: { show_student_id: true } });
+  const c = await rpc('get_counters');
+  assert.ok('cat_pets' in c && 'trash' in c);
+  for (const bad of [{ stamp_size: 500 }, { cat_sleep_min: -1 }, { cat_name: '' }, { cat_name: '가'.repeat(21) }, { deadline: 'soon' }]) {
+    await expectErr(admin('admin_update_settings', { p: { extras: bad } }), 'invalid_settings');
+  }
 });
 
 await test('counters: cat pets; 휴지통 counts batons let go without a line', async () => {

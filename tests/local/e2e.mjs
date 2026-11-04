@@ -50,6 +50,11 @@ async function handle(route) {
   }
   if (url.pathname.startsWith('/auth/v1/logout')) return route.fulfill({ status: 204, headers: cors });
 
+  if (url.pathname === '/rest/v1/realtime_signals') {          // the version poll (anon can read this table)
+    const keys = (url.searchParams.get('key') ?? '').replace(/^in\.\(|\)$/g, '').split(',').map(k => k.replace(/^"|"$/g, '')).filter(Boolean);
+    const r = await pool.query('select key, version from public.realtime_signals where key = any($1)', [keys]);
+    return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(r.rows.map(x => ({ key: x.key, version: Number(x.version) }))) });
+  }
   const m = url.pathname.match(/^\/rest\/v1\/rpc\/(\w+)$/);
   if (!m) return route.fulfill({ status: 404, headers: cors, body: '' });
   const args = JSON.parse(req.postData() || '{}');
@@ -139,7 +144,7 @@ await step('first visit: boot log, login window, validation, enter -> drawer', a
   assert.match(await win(p, `story:${storyId}`).locator('.win-title').textContent(), /E2E 이야기/);
 
   // starter cannot continue
-  await win(p, `story:${storyId}`).locator('text=이어 쓰기').click();
+  await win(p, `story:${storyId}`).locator('button:text-is("이어 쓰기")').click();
   await p.waitForSelector('text=1줄까지 쓸 수 있어요');
 });
 
@@ -150,7 +155,7 @@ await step('deep link + writer B: claim, counter, Enter submits -> line 2', asyn
   await w.waitFor();
   assert.equal(await b.locator('.win[data-key="stories"]').count(), 1, 'drawer open behind');
   assert.match(await w.textContent(), /이영희 님으로 써요/);
-  await w.locator('text=이어 쓰기').click();
+  await w.locator('button:text-is("이어 쓰기")').click();
   await w.locator('textarea').waitFor();
   assert.match(await w.textContent(), /2번째 줄/);
   await w.locator('textarea').fill('마을에는 이상한 우체통이 하나 있었다.');
@@ -165,17 +170,17 @@ await step('baton held by D: C sees pending row, gets baton_held; D late -> conf
   const d = await newUser('최지우', '2026100004');
   await d.goto(`${BASE}/#/story/${storyId}`);
   const wd = win(d, `story:${storyId}`);
-  await wd.locator('text=이어 쓰기').click();
+  await wd.locator('button:text-is("이어 쓰기")').click();
   await wd.locator('textarea').waitFor();
   const c = await newUser('박민수', '2026100003');
   await c.goto(`${BASE}/#/story/${storyId}`);
   const wc = win(c, `story:${storyId}`);
   await wc.locator('.line.pending').waitFor();
   assert.match(await wc.textContent(), /다른 사람이 쓰는 중이에요/);
-  await wc.locator('text=이어 쓰기').click();
+  await wc.locator('button:text-is("이어 쓰기")').click();
   await wc.locator('text=다른 사람이 이어 쓰는 중이에요').waitFor();
   await pool.query(`update app.stories set baton_expires_at = now() - interval '1 s' where baton_name = '최지우'`);
-  await wc.locator('text=이어 쓰기').click();
+  await wc.locator('button:text-is("이어 쓰기")').click();
   await wc.locator('textarea').fill('우체통은 밤마다 편지를 뱉어냈다.');
   await wc.locator('text=올리기').click();
   await c.waitForFunction(id => document.querySelectorAll(`.win[data-key="story:${id}"] .line:not(.pending)`).length === 3, storyId);
@@ -189,7 +194,7 @@ await step('baton held by D: C sees pending row, gets baton_held; D late -> conf
   assert.equal(await wd.locator('textarea').inputValue(), '그 우체통에는 주인이 없었다.');
   assert.match(await wd.textContent(), /4번째 줄/);
   await wd.locator('text=취소').click();
-  await wd.locator('text=이어 쓰기').waitFor();
+  await wd.locator('button:text-is("이어 쓰기")').waitFor();
 });
 
 await step('writer reveal: 속성 window with name + student id, Escape closes', async () => {
@@ -237,12 +242,12 @@ await step('final-line warning and 완결 stamp', async () => {
   const e = await newUser('정하늘', '2026100005');
   await e.goto(`${BASE}/#/story/${storyId}`);
   const w = win(e, `story:${storyId}`);
-  await w.locator('text=이어 쓰기').click();
+  await w.locator('button:text-is("이어 쓰기")').click();
   await w.locator('text=마지막 줄이에요').waitFor();
   await w.locator('textarea').fill('그리고 마을은 다시 조용해졌다.');
   await w.locator('text=올리기').click();
   await w.locator('.story-head:not([hidden]) svg[aria-label="완결 도장"]').waitFor();
-  assert.match(await w.textContent(), /이야기가 완결되었습니다/);
+  assert.match(await w.textContent(), /이야기가 완결됐어요/);
   assert.ok(await e.locator('.seal-drop').count() <= 1);
   assert.match(await w.locator('.record summary').textContent(), /4줄 · 원고지 [\d.]+매 · 4명/);
   await w.locator('.record summary').click();
@@ -267,7 +272,7 @@ await step('guest: browse read-only, writing asks to log in, then returns to the
   await g.fill('#lg-name', '손님이었던 사람');
   await g.fill('#lg-sid', '2026100009');
   await g.click('text=들어가기');
-  await w.locator('text=이어 쓰기').waitFor();
+  await w.locator('button:text-is("이어 쓰기")').waitFor();
   assert.match(await w.textContent(), /손님이었던 사람 님으로 써요/);
   assert.match(g.url(), new RegExp(`#/story/${id}`));
 });
@@ -405,7 +410,7 @@ await step('mobile: one window at a time, dock navigation, sheet reveal, compose
   await m.locator('.win-bar').first().tap?.().catch(() => {});
   await m.mouse.click(10, 300);
   assert.equal(await m.locator('.props').count(), 0);
-  await w.locator('text=이어 쓰기').click();
+  await w.locator('button:text-is("이어 쓰기")').click();
   await w.locator('textarea').waitFor();
   await m.screenshot({ path: `${SHOTS}/09-mobile-writing.png` });
   await w.locator('text=취소').click();
@@ -756,7 +761,7 @@ await step('mobile: stamp sheet buttons, cat on the dock, D-n deadline', async (
   await p.locator('.props.sheet .stamp-btn').nth(2).tap();
   await p.locator('.props.sheet .stamp-btn.is-mine').waitFor();
   await p.keyboard.press('Escape');
-  assert.match(await p.locator('.menubar .deadline').textContent(), /^D-\d+$/);
+  assert.match(await p.locator('.menubar .deadline').textContent(), /^마감 D-(\d+|day)$/);
   await p.locator('.cat').waitFor();
   await p.screenshot({ path: `${SHOTS}/33-mobile-story.png` });
 });

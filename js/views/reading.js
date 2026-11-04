@@ -15,16 +15,17 @@ export function readingView(app, storyId) {
 
   const prev = h('div', { class: 'read-prev' });
   const num = h('div', { class: 'read-no' });
-  const cur = h('div', { class: 'read-cur', 'aria-live': 'polite' });
+  const cur = h('div', { class: 'read-cur', 'aria-hidden': 'true' });
+  const said = h('div', { class: 'sr-only', 'aria-live': 'polite' });      // the whole line, once
   const end = h('div', { class: 'read-end', hidden: true });
-  const stage = h('div', { class: 'read-stage' }, prev, h('div', { class: 'read-row' }, num, cur), end);
+  const stage = h('div', { class: 'read-stage' }, prev, h('div', { class: 'read-row' }, num, cur), said, end);
   const segs = h('div', { class: 'read-segs', 'aria-hidden': 'true' });
   const playBtn = h('button', { type: 'button', class: 'btn read-play', onclick: toggle, 'aria-label': '재생' }, '▶');
   const prevBtn = h('button', { type: 'button', class: 'btn', onclick: () => go(idx - 1), 'aria-label': '이전 줄' }, '⏮');
   const nextBtn = h('button', { type: 'button', class: 'btn', onclick: () => go(idx + 1), 'aria-label': '다음 줄' }, '⏭');
   const bars = h('span', { class: 'read-bars', 'aria-hidden': 'true' }, Array.from({ length: 6 }, () => h('i')));
   const voiceBtn = on('reading_voice')
-    ? h('button', { type: 'button', class: 'btn-link', onclick: () => { voice = !voice; voiceBtn.textContent = voice ? '소리 켬' : '소리 끔'; } }, '소리 켬')
+    ? h('button', { type: 'button', class: 'btn-link', 'aria-pressed': 'true', onclick: () => { voice = !voice; voiceBtn.textContent = voice ? '목소리 켬' : '목소리 끔'; voiceBtn.setAttribute('aria-pressed', String(voice)); } }, '목소리 켬')
     : null;
   const speedSel = h('select', { class: 'field sm', 'aria-label': '빠르기', onchange: (e) => { speed = Number(e.target.value); } },
     [1, 1.5, 2].map(v => h('option', { value: v }, `빠르기 ×${v}`)));
@@ -49,7 +50,8 @@ export function readingView(app, storyId) {
     if (idx >= lines.length) { finish(); return; }
     const l = lines[idx];
     prev.textContent = idx ? lines[idx - 1].text : '';
-    num.textContent = `${l.position}줄`;
+    num.textContent = String(l.position).padStart(2, '0');
+    said.textContent = `${l.position}번째 줄. ${l.text}`;
     if (!type || reduceMotion()) { cur.textContent = l.text; return afterLine(); }
     cur.textContent = '';
     const chars = [...l.text];
@@ -97,6 +99,7 @@ export function readingView(app, storyId) {
     if (!body.isConnected && !stage.isConnected) return;
     if (!stage.closest('.win')?.classList.contains('is-active')) return;
     if (e.target.closest('input, textarea, select')) return;
+    if (e.key === ' ' && e.target.closest('button, a')) return;     // Space on a focused button presses that button
     if (e.key === ' ') { e.preventDefault(); toggle(); }
     else if (e.key === 'ArrowLeft') go(idx - 1);
     else if (e.key === 'ArrowRight') go(idx + 1);

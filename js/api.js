@@ -154,10 +154,11 @@ export function toggleStamp(lineId, kind, { name, studentId }) {
 }
 // -> { <line_id>: { marks: [[kind, x, y, rot]], counts: {sun, laugh, cur}, mine: [kind] } }
 export const getStoryStamps = (storyId, studentId = null) =>
-  call('get_story_stamps', { p_story_id: storyId, p_student_id: studentId });
+  call('get_story_stamps', { p_story_id: storyId, p_student_id: studentId, p_client: studentId ? clientToken() : null });
 export const petCat = () => call('pet_cat');
 export const storyCards = () => call('story_cards');
 export const getAbout = () => call('get_about');
+export const getCounters = () => call('get_counters');
 
 // Live "누군가 쓰는 중 (23자)": a Realtime broadcast per story, numbers only.
 export function typingChannel(storyId, onCount) {
@@ -190,24 +191,59 @@ export function poke(keys) {
 
 const subscribers = new Set();
 let channel = null;
-let pollTimer = null;
-const POLL_MS = 20000;
+let live = false;                         // realtime channel subscribed
+const POLL_MS = 20000;                    // version check (one tiny request)
+const SWEEP_MS = 120000;                  // full refresh, for time-based changes (expired batons)
+const versions = new Map();               // signal key -> last seen version
 
-function notify(sub) {
+function notify(sub, jitter = 0) {
   clearTimeout(sub.t);
-  sub.t = setTimeout(() => sub.fn(), 250);
+  sub.t = setTimeout(() => sub.fn(), 250 + Math.random() * jitter);
+}
+function notifyKey(key) {
+  // 'list' is watched by many windows on every client: spread those refetches out a little
+  for (const s of subscribers) if (s.keys.includes(key)) notify(s, key === 'list' ? 1500 : 0);
+}
+// Ask only "which watched keys changed?" and notify just those subscribers.
+let checking = false;
+async function checkVersions() {
+  if (checking || !subscribers.size) return;
+  checking = true;
+  try {
+    const keys = [...new Set([...subscribers].flatMap(s => s.keys))];
+    const { data, error } = await sb.from('realtime_signals').select('key,version').in('key', keys);
+    if (error || !data) return;
+    for (const { key, version } of data) {
+      const prev = versions.get(key);
+      versions.set(key, version);
+      if (prev !== undefined && prev !== version) notifyKey(key);
+    }
+  } catch { /* next round */ } finally { checking = false; }
 }
 function ensureChannel() {
   if (channel) return;
   channel = sb.channel('signals')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'realtime_signals' }, (p) => {
       const key = p.new?.key;
-      for (const s of subscribers) if (s.keys.includes(key)) notify(s);
+      if (p.new?.version != null) versions.set(key, p.new.version);
+      notifyKey(key);
     })
-    .subscribe();
-  // Safety net: slow poll while visible, and refresh on returning to the tab.
-  pollTimer = setInterval(() => { if (!document.hidden) subscribers.forEach(notify); }, POLL_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) subscribers.forEach(notify); });
+    .subscribe((status) => { live = status === 'SUBSCRIBED'; });
+  // Safety nets: a cheap version check (every 20 s, or 60 s while realtime is up) and a slow
+  // full sweep; on returning to the tab, check right away.
+  let n = 0;
+  setInterval(() => {
+    if (document.hidden) return;
+    n++;
+    if (n % (SWEEP_MS / POLL_MS) === 0) { subscribers.forEach(s => notify(s, 3000)); return; }
+    if (!live || n % 3 === 0) checkVersions();
+  }, POLL_MS);
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (Date.now() - hiddenAt > SWEEP_MS) subscribers.forEach(s => notify(s, 1000));
+    else checkVersions();
+  });
 }
 
 // Calls fn() (debounced) whenever one of `keys` changes on the server. Returns unsubscribe.
@@ -215,6 +251,7 @@ export function watch(keys, fn) {
   ensureChannel();
   const sub = { keys, fn, t: null };
   subscribers.add(sub);
+  setTimeout(checkVersions, 1000);        // learn the starting versions
   return () => { clearTimeout(sub.t); subscribers.delete(sub); };
 }
 

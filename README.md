@@ -23,7 +23,8 @@ Static frontend on GitHub Pages + a Supabase (Postgres) backend.
   later lines to `archived`; "Swap in, keep following" replaces one line and
   re-attaches the rest. Each can be undone the same way. Soft delete just hides.
 - Live updates: clients subscribe to `public.realtime_signals` and re-fetch,
-  with a 20 s poll as a fallback.
+  Safety nets: a cheap version check of the watched signal keys (every 20 s without realtime,
+  60 s with it; only changed keys trigger a re-fetch) and a full refresh every 2 minutes.
 
 ## Files
 
@@ -86,7 +87,8 @@ Every extra has a switch in **관리자 콘솔 → 부가 기능** (inner tabs �
   오늘의 첫 문장, 이 컴퓨터에 관하여), `record.js` (이야기 기록), `sound.js` + `synth.js` (all sounds synthesized with WebAudio in one retro chip palette — pulse, triangle, LFSR noise, 60 Hz steps — no files; off by default per device; the 낭독회 voice follows Korean phrase intonation),
   `fun.js` (숨은 재미 — deliberately not in 도움말).
 - Database: `stamps`, `counters` (cat pets, unused batons) and RPCs `toggle_stamp`, `get_story_stamps`,
-  `pet_cat`, `story_cards`, `get_about`, `admin_line_stamps` (migration `20261106000000_extras.sql`).
+  `pet_cat`, `story_cards`, `get_about`, `get_counters`, `admin_line_stamps` (migrations `20261106000000_extras.sql`,
+  `20261108000000_hardening.sql`: one baton per person, stamp ownership by device, range checks).
 - Live "n자 쓰는 중" uses a Realtime broadcast channel `typing:<storyId>` (numbers only, nothing stored).
 - Per-device choices (sound, sky override, screen saver off, 원고지 칸, memo) live in localStorage `rn.*`.
 
@@ -99,7 +101,7 @@ Never edit an applied migration. Add a new file
 
 ```
 cd tests/local && npm install
-npm test        # resets a local DB, applies migrations, runs run.mjs (30 checks incl. races)
+npm test        # resets a local DB, applies migrations, runs run.mjs (32 checks incl. races)
 npm run e2e     # browser flows with Playwright against the same local DB (desktop + phone; ONLY=<name> runs one flow)
 ```
 `reset.sh` expects a local server on socket `/var/lib/postgresql/rn`, port 5433.
