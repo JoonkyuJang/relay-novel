@@ -41,10 +41,13 @@ export function initSaver(app, wm, cat) {
     }
     wake();
   }
+  // Only a click / tap or a key press wakes the screen; moving the mouse or scrolling over it
+  // doesn't, so people can sit and watch it. (Without a saver, any of them counts as activity.)
   for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, activity, { capture: true });
-  // scrolling must stay passive (no scroll jank on phones); the wake tap is caught by pointerdown
-  for (const ev of ['wheel', 'touchstart']) addEventListener(ev, () => activity(null), { capture: true, passive: true });
-  addEventListener('pointermove', (e) => { if (e.movementX || e.movementY) activity(null); }, { capture: true, passive: true });
+  const stir = () => { if (!overlay) last = Date.now(); };
+  // scrolling must stay passive (no scroll jank on phones)
+  for (const ev of ['wheel', 'touchstart']) addEventListener(ev, stir, { capture: true, passive: true });
+  addEventListener('pointermove', (e) => { if (e.movementX || e.movementY) stir(); }, { capture: true, passive: true });
   bus.on('activity', () => { last = Date.now(); });
   bus.on('saver-now', () => { last = Date.now() - (X('saver_typing_min') ?? 3) * 60e3; setTimeout(check, 50); });
 
@@ -76,7 +79,7 @@ export function initSaver(app, wm, cat) {
     const o = frame();
     const clock = h('div', { class: 'saver-clock' }, fmtClock());
     loops.push(setInterval(() => { clock.textContent = fmtClock(); }, 20e3));
-    const hint = h('div', { class: 'saver-hint' }, isPhone() ? '화면을 누르면 돌아가요' : '아무 키나 누르거나 마우스를 움직이면 돌아가요');
+    const hint = h('div', { class: 'saver-hint' }, isPhone() ? '화면을 누르면 돌아가요' : '클릭하거나 아무 키나 누르면 돌아가요');
     o.dataset.kind = kind;
     o.replaceChildren(clock, hint);
     if (kind === 'typing') typing(o); else stars(o);

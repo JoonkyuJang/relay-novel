@@ -691,9 +691,20 @@ await step('화면 보호기: starts on demand, the waking key is swallowed', as
   await p.locator('.saver-meta:not([hidden])').waitFor({ timeout: 20000 });
   await p.screenshot({ path: `${SHOTS}/28-saver-typing.png` });
   assert.ok(await p.locator('.cat').isHidden());
-  await p.keyboard.press('a');
+  // moving the mouse or scrolling doesn't end it — you can sit and watch
+  await p.mouse.move(300, 300); await p.mouse.move(700, 500, { steps: 8 }); await p.mouse.wheel(0, 300);
+  await p.waitForTimeout(600);
+  assert.equal(await p.locator('.saver').count(), 1, 'still showing after mouse movement');
+  // a click ends it, and doesn't press whatever was underneath
+  await p.mouse.click(640, 400);
   await p.waitForSelector('.saver', { state: 'detached' });
   await p.locator('.cat').waitFor();
+  // so does a key
+  await p.mouse.click(900, 700, { button: 'right' });
+  await p.locator('.ctx >> text=화면 보호기 지금 켜기').click();
+  await p.locator('.saver').waitFor({ timeout: 10000 });
+  await p.keyboard.press('a');
+  await p.waitForSelector('.saver', { state: 'detached' });
 });
 
 await step('호박색 단말기 and 낮과 밤 switch', async () => {
