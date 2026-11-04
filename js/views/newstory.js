@@ -1,7 +1,7 @@
 // 새 이야기: title (required unless the admin turns it off) + first line.
 import * as api from '../api.js';
 import { h, errorText } from '../ui.js';
-import { X } from '../extras/extras.js';
+import { X, deadlinePassed } from '../extras/extras.js';
 
 export function newStoryView(app) {
   const st = () => app.settings ?? { max_chars: 100, max_title_chars: 40 };
@@ -28,8 +28,10 @@ export function newStoryView(app) {
     who.textContent = ident ? `${ident.name} 님으로 시작해요` : '시작하려면 로그인이 필요해요';
     go.textContent = ident ? '시작하기' : '로그인하고 시작하기';
     const s = st();
-    go.disabled = s.submissions_open === false || s.allow_new_stories === false;
-    if (go.disabled) msg.replaceChildren(h('div', { class: 'notice warn', dataset: { closed: '1' } }, errorText({ code: s.submissions_open === false ? 'submissions_closed' : 'new_stories_closed' })));
+    const why = s.submissions_open === false ? 'submissions_closed' : deadlinePassed() ? 'deadline_passed'
+      : s.allow_new_stories === false ? 'new_stories_closed' : null;
+    go.disabled = !!why;
+    if (why) msg.replaceChildren(h('div', { class: 'notice warn', dataset: { closed: '1' } }, errorText({ code: why })));
     else if (msg.querySelector('[data-closed]')) msg.replaceChildren();
   }
   text.addEventListener('input', update);

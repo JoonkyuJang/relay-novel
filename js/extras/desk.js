@@ -30,6 +30,15 @@ export function deadlineParts(now = Date.now()) {
   const s = Math.floor(left / 1000);
   return { left, d: Math.floor(s / 86400), hh: Math.floor(s / 3600) % 24, mm: Math.floor(s / 60) % 60, ss: s % 60, end };
 }
+// "11월 22일(일) 밤 12시" for a midnight deadline, otherwise "11월 22일(일) 18:00" (Seoul time)
+export function deadlineText(end) {
+  const at = kst(new Date(end));
+  if (at.h === 0 && at.min === 0) {
+    const e = kst(new Date(end - 1));
+    return `마감: ${e.m}월 ${e.d}일(${WEEKDAY[e.wd]}) 밤 12시`;
+  }
+  return `마감: ${at.m}월 ${at.d}일(${WEEKDAY[at.wd]}) ${String(at.h).padStart(2, '0')}:${String(at.min).padStart(2, '0')}`;
+}
 export function deadlineEl() {
   const el = h('span', { class: 'deadline', role: 'timer', 'aria-live': 'off' });
   const p2 = (n) => String(n).padStart(2, '0');
@@ -37,9 +46,8 @@ export function deadlineEl() {
     const p = deadlineParts();
     el.hidden = !p;
     if (!p) return;
-    const e = kst(new Date(p.end - 1));
-    el.title = `마감: ${e.m}월 ${e.d}일(${WEEKDAY[e.wd]}) 밤 12시 (24:00)`;
-    if (p.left === 0) el.textContent = '마감!';
+    el.title = deadlineText(p.end) + (on('deadline_closes') ? ' · 이 시간이 지나면 글쓰기가 닫혀요' : '');
+    if (p.left === 0) el.textContent = '마감됐어요';
     else if (isPhone()) el.textContent = p.d ? `마감 D-${p.d}` : '마감 D-day';
     else el.textContent = `마감까지 ${p.d ? `${p.d}일 ` : ''}${p2(p.hh)}:${p2(p.mm)}:${p2(p.ss)}`;
   };

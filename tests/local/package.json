@@ -2,6 +2,6 @@
   "name": "relay-novel-local-tests",
   "private": true,
   "type": "module",
-  "scripts": { "test": "./reset.sh && node run.mjs", "e2e": "./reset.sh && LANG=C.UTF-8 node e2e.mjs" },
+  "scripts": { "test": "node ../../tools/version.mjs --check && ./reset.sh && node run.mjs", "e2e": "./reset.sh && LANG=C.UTF-8 node e2e.mjs" },
   "dependencies": { "pg": "^8" }
 }

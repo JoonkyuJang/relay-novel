@@ -144,8 +144,8 @@ await step('first visit: boot log, login window, validation, enter -> drawer', a
   assert.match(await win(p, `story:${storyId}`).locator('.win-title').textContent(), /E2E 이야기/);
 
   // starter cannot continue
-  await win(p, `story:${storyId}`).locator('button:text-is("이어 쓰기")').click();
-  await p.waitForSelector('text=1줄까지 쓸 수 있어요');
+  await p.waitForSelector('text=1줄까지 쓸 수 있어요');                           // said before pressing
+  assert.ok(await win(p, `story:${storyId}`).locator('button:text-is("이어 쓰기")').isDisabled());
 });
 
 await step('deep link + writer B: claim, counter, Enter submits -> line 2', async () => {
@@ -833,6 +833,35 @@ await step('mobile tour: drawer cards, finished story, 낭독회, help, about, m
   await p.locator('.saver').waitFor({ timeout: 10000 });
   await p.waitForTimeout(2500);
   await shot('08-saver');
+});
+
+await step('why you cannot write is shown before pressing 이어 쓰기 (own limit, deadline)', async () => {
+  const id = (await pool.query(`select public.create_story('내가 시작한 이야기', '첫 줄.', '시작한이', '2026100809', 'seed') as r`)).rows[0].r.story_id;
+  const p = await newUser('시작한이', '2026100809');
+  await p.goto(`${BASE}/#/story/${id}`);
+  const w = win(p, `story:${id}`);
+  await w.locator('.win-foot .notice', { hasText: '한 사람당' }).waitFor();
+  assert.ok(await w.locator('button:text-is("이어 쓰기")').isDisabled());
+  await pool.query(`update app.settings set extras = extras || '{"deadline_closes": true, "deadline": "2020-01-01T00:00:00+09:00"}'`);
+  const q = await newUser('늦은이', '2026100810');
+  await q.goto(`${BASE}/#/new`);
+  await win(q, 'new').locator('text=마감 시간이 지나').waitFor();
+  assert.ok(await win(q, 'new').locator('button[type=submit]').isDisabled());
+  await q.waitForFunction(() => /마감됐어요/.test(document.querySelector('.menubar .deadline')?.textContent ?? ''));
+  await pool.query(`update app.settings set extras = extras - 'deadline_closes' - 'deadline'`);
+});
+
+await step('versioned files: every module and stylesheet loads once, with its ?v= hash', async () => {
+  const p = await newUser('버전', '2026100808');
+  const urls = [];
+  p.on('request', r => { const u = new URL(r.url()); if (u.origin === BASE && /\.(js|css)$/.test(u.pathname)) urls.push(u.pathname + u.search); });
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').waitFor();
+  await p.waitForTimeout(500);
+  const bare = urls.filter(u => !u.includes('?v=') && !u.includes('/vendor/'));
+  assert.deepEqual(bare, [], 'loaded without a version');
+  assert.equal(new Set(urls).size, urls.length, 'nothing fetched twice');
+  assert.ok(urls.filter(u => u.endsWith('.js') || u.includes('.js?')).length >= 26);
 });
 
 await step('no page errors', async () => { assert.deepEqual(errors, []); });

@@ -3,7 +3,7 @@
 // 자리 나면 알려 주기, 원고지 writing box, finished-story header / 이야기 기록, completion effects.
 import * as api from '../api.js';
 import { h, icon, fmtTime, fmtCountdown, errorText, attachReveal } from '../ui.js';
-import { on, fun, bus, X, manuscript, reduceMotion } from '../extras/extras.js';
+import { on, fun, bus, X, manuscript, reduceMotion, deadlinePassed } from '../extras/extras.js';
 import { fillPad, stampButtons, updateTicks, seal } from '../extras/stamps.js';
 import { relayRecord, recordView, gridIcon } from '../extras/record.js';
 import { play } from '../extras/sound.js';
@@ -31,6 +31,7 @@ export function storyView(app, storyId) {
   let notifyFree = false;
   let unwatch = null, ticker = null, typing = null, ro = null;
   let closed = false, claiming = false, linesSig = null;
+  let blocker = null, lastBlockerSig = 'null';          // why I can't write here (write_check), shown before pressing 이어 쓰기
   let gridMode = api.prefs.get('gridbox') == null ? !!X('grid_box_default') : api.prefs.get('gridbox') === '1';
   const serverNow = () => Date.now() + clockOffset;
 
@@ -83,8 +84,7 @@ export function storyView(app, storyId) {
       chip,
       h('span', {}, `${story.line_count} / ${story.max_lines}줄`),
       story.status === 'open' ? h('span', { class: 'muted' }, `${left}줄 남음 · 한 줄 최대 ${story.max_chars}자`) : null,
-      h('span', { style: 'flex:1' }),
-      h('span', { class: 'faint' }, `RN-${storyId.slice(0, 4).toUpperCase()}`)].filter(Boolean));
+    ].filter(Boolean));
   }
 
   const isFull = (l) => fun('fun_full') && !l.removed && api.countChars(l.text) === story.max_chars;
@@ -235,7 +235,11 @@ export function storyView(app, storyId) {
       const min = Math.max(1, Math.round((app.settings?.baton_seconds ?? 300) / 60));
       status.append(h('span', { class: 'muted' }, `${story.line_count + 1}번째 줄이 비어 있어요. '이어 쓰기'를 누르면 ${min}분 동안 내 자리로 맡아 둬요.`));
     }
-    const closedNow = app.settings?.submissions_open === false;
+    // a reason to show up front: writing closed / deadline, or my own limits in this story
+    // (someone else's reservation is already shown above and ends by itself)
+    const reason = app.settings?.submissions_open === false ? { code: 'submissions_closed' }
+      : deadlinePassed() ? { code: 'deadline_passed' }
+      : ident && blocker && ['person_limit', 'consecutive', 'submissions_closed', 'deadline_passed'].includes(blocker.code) ? blocker : null;
     const notifyBtn = story.writing && on('notify_free')
       ? h('button', { type: 'button', class: 'btn', 'aria-pressed': String(notifyFree), onclick: () => { notifyFree = !notifyFree; renderFoot(); } },
           notifyFree ? '✓ 자리 나면 알려 드려요' : '자리 나면 알려 주기')
@@ -243,11 +247,11 @@ export function storyView(app, storyId) {
     return [
       status,
       message ? h('div', { class: 'notice bad', role: 'alert' }, message)
-        : closedNow ? h('div', { class: 'notice warn' }, errorText({ code: 'submissions_closed' })) : null,
+        : reason ? h('div', { class: 'notice warn' }, errorText(reason)) : null,
       h('div', { class: 'actions', style: 'align-items:center' },
         ident
           ? [h('span', { class: 'muted', style: 'margin-right:auto' }, `${ident.name} 님으로 써요`), notifyBtn,
-             h('button', { type: 'button', class: 'btn btn-primary', onclick: claim, disabled: closedNow }, '이어 쓰기')]
+             h('button', { type: 'button', class: 'btn btn-primary', onclick: claim, disabled: !!reason }, '이어 쓰기')]
           : [notifyBtn, h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.requireLogin('글을 쓰려면 로그인해 주세요.', route) }, '로그인하고 이어 쓰기')]),
     ];
   }
@@ -391,7 +395,7 @@ export function storyView(app, storyId) {
   async function refreshStamps() {
     if (!on('stamps')) return;
     try {
-      stamps = await api.getStoryStamps(storyId, app.identity()?.studentId ?? null);
+      stamps = await api.getStoryStamps(storyId, app.identity());
       if (closed) return;
       for (const li of list.querySelectorAll('.line[data-id]')) {
         const pad = li.querySelector('.stamp-pad');
@@ -403,10 +407,15 @@ export function storyView(app, storyId) {
 
   async function refresh() {
     try {
+      const ident = app.identity();
       const [s] = await Promise.all([api.getStory(storyId), on('stamps')
-        ? api.getStoryStamps(storyId, app.identity()?.studentId ?? null).then(x => { stamps = x; }).catch(() => {})
-        : null]);
+        ? api.getStoryStamps(storyId, ident).then(x => { stamps = x; }).catch(() => {})
+        : null,
+        ident && mode !== 'writing' && story?.status !== 'completed'
+          ? api.writeCheck(storyId, ident.studentId).then(x => { blocker = x; }).catch(() => {})
+          : null]);
       if (closed) return;
+      const blockerSig = JSON.stringify(blocker);
       const prevMode = mode, prevWriting = story?.writing, prevStatus = story?.status;
       story = s;
       clockOffset = Date.parse(s.server_now) - Date.now();
@@ -414,7 +423,9 @@ export function storyView(app, storyId) {
       if (prevWriting && !s.writing) onFreed();
       renderBar();
       renderLines();
-      if (mode !== 'writing' && (prevMode !== mode || prevWriting !== s.writing || prevStatus !== s.status || !foot.hasChildNodes())) renderFoot();
+      const blockerChanged = blockerSig !== lastBlockerSig;
+      lastBlockerSig = blockerSig;
+      if (mode !== 'writing' && (prevMode !== mode || prevWriting !== s.writing || prevStatus !== s.status || blockerChanged || !foot.hasChildNodes())) renderFoot();
       else tick();
       if (prevStatus === 'open' && s.status === 'completed') celebrate();
     } catch (e) {

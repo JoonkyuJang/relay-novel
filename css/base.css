@@ -3,9 +3,7 @@
    1-bit windows on 연문회 cream, pixel type, club label colours.
    ===================================================================== */
 
-@font-face { font-family: "Galmuri11"; src: url("../fonts/Galmuri11.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Galmuri11"; src: url("../fonts/Galmuri11-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
-@font-face { font-family: "NeoDGM"; src: url("../fonts/NeoDGM.woff2") format("woff2"); font-display: swap; }
+/* fonts: css/fonts.css */
 
 :root {
   --desk:   #FFF9EF;   /* 연문회 cream desktop (with indigo dots) */
@@ -316,7 +314,12 @@ body.crt::after {
   .dock a[aria-current="page"] { background: var(--ink); color: var(--paper); }
   .dock a[aria-current="page"] svg path { stroke: var(--paper); }
   .dock a[aria-current="page"] svg path[data-fill] { fill: var(--ink); }
-  body.crt::after { box-shadow: inset 0 0 70px rgba(29,42,68,0.16); }
+  /* phones: same look, cheaper — a painted vignette instead of a blurred box-shadow layer */
+  body.crt::after {
+    box-shadow: none;
+    background-image: repeating-linear-gradient(to bottom, rgba(29,42,68,0.05) 0 1px, transparent 1px 3px),
+                      radial-gradient(ellipse at center, transparent 62%, rgba(29,42,68,0.14) 100%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

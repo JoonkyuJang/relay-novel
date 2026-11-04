@@ -9,7 +9,7 @@
 
 export const DEFAULTS = {
   crt_default: true, boot_screen: true, presence: true,
-  deadline_on: true, deadline: '2026-11-23T00:00:00+09:00',
+  deadline_on: true, deadline: '2026-11-23T00:00:00+09:00', deadline_closes: false,
   context_menu: true, minimize: true, trash: true, memo: true,
   first_sentence: true, typing_count: true, notify_free: true,
   grid_box_default: false, about: true,
@@ -62,3 +62,7 @@ export function yeyo(word) {
   const c = (word ?? '').codePointAt(word.length - 1) - 0xAC00;
   return c >= 0 && c < 11172 && c % 28 ? `${word}이에요` : `${word}예요`;
 }
+
+// The admin can let the deadline close writing (the server enforces it too).
+export const deadlinePassed = (now = Date.now()) =>
+  !!current.deadline_closes && !Number.isNaN(Date.parse(current.deadline)) && now >= Date.parse(current.deadline);

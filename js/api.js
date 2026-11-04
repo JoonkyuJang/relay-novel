@@ -153,8 +153,11 @@ export function toggleStamp(lineId, kind, { name, studentId }) {
   return call('toggle_stamp', { p_line_id: lineId, p_kind: kind, p_name: name, p_student_id: studentId, p_client: clientToken() });
 }
 // -> { <line_id>: { marks: [[kind, x, y, rot]], counts: {sun, laugh, cur}, mine: [kind] } }
-export const getStoryStamps = (storyId, studentId = null) =>
-  call('get_story_stamps', { p_story_id: storyId, p_student_id: studentId, p_client: studentId ? clientToken() : null });
+// "mine" = stamps by this 이름 + 학번 (from any device)
+export const getStoryStamps = (storyId, ident = null) =>
+  call('get_story_stamps', { p_story_id: storyId, p_student_id: ident?.studentId ?? null, p_name: ident?.name ?? null });
+// Why this person can't write in this story right now: null, or { code, detail }
+export const writeCheck = (storyId, studentId) => call('write_check', { p_story_id: storyId, p_student_id: studentId });
 export const petCat = () => call('pet_cat');
 export const storyCards = () => call('story_cards');
 export const getAbout = () => call('get_about');
