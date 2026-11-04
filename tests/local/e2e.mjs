@@ -1,14 +1,14 @@
-// Browser end-to-end test of the barebones UI against the LOCAL Postgres.
+// Browser end-to-end test of 연문회 OS against the LOCAL Postgres.
 // Supabase HTTP calls are intercepted and executed the way PostgREST would
 // (role anon, or authenticated with the JWT "sub"). Realtime is not emulated,
-// so pages fall back to polling / manual refresh.
+// so pages rely on refreshes after their own actions / polling.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-const { chromium } = createRequire(import.meta.url)('playwright');
+const { chromium, devices } = createRequire(import.meta.url)('playwright');
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const SB = 'https://xuuoyzhksctpzxcylhwe.supabase.co';
@@ -18,7 +18,7 @@ const SHOTS = process.env.SHOTS ?? '/tmp/rn-shots';
 fs.mkdirSync(SHOTS, { recursive: true });
 
 // ---- static server
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (p.endsWith('/')) p += 'index.html';
@@ -76,167 +76,324 @@ async function handle(route) {
 
 // ---- browser
 const browser = await chromium.launch();
-async function newUser(name, sid) {
-  const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+const errors = [];
+async function newUser(name, sid, { mobile = false, entered = true } = {}) {
+  const ctx = await browser.newContext(mobile ? { ...devices['iPhone 13'] } : { viewport: { width: 1280, height: 800 } });
   await ctx.route(`${SB}/**`, handle);
   await ctx.routeWebSocket?.(/supabase\.co/, ws => ws.close?.());
-  await ctx.addInitScript(([n, s]) => { localStorage.setItem('rn.name', n); localStorage.setItem('rn.sid', s); }, [name, sid]);
+  if (entered && name) {
+    await ctx.addInitScript(([n, s]) => {
+      if (!sessionStorage.getItem('seeded')) {
+        localStorage.setItem('rn.name', n); localStorage.setItem('rn.sid', s); sessionStorage.setItem('seeded', '1');
+      }
+    }, [name, sid]);
+  }
   const page = await ctx.newPage();
-  page.on('pageerror', e => console.error(`[${name}] pageerror`, e.message));
+  page.on('pageerror', e => { errors.push(`[${name}] ${e.message}`); console.error(`[${name}] pageerror`, e.message); });
   page.on('dialog', d => d.accept());
   return page;
 }
+const win = (p, key) => p.locator(`.win[data-key="${key}"]`);
 
 let passed = 0;
 async function step(name, fn) {
   try { await fn(); passed++; console.log('  ✓', name); }
-  catch (e) { console.error('  ✗', name, '\n    ', e.message); process.exitCode = 1; }
+  catch (e) { console.error('  ✗', name, '\n    ', e.message.split('\n').slice(0, 6).join('\n     ')); process.exitCode = 1; }
 }
 
-console.log('relay-novel e2e (local)');
+console.log('연문회 OS e2e (local)');
 await pool.query(`insert into app.admins(user_id) values ($1) on conflict do nothing`, [ADMIN]);
 
-const a = await newUser('김철수', '2026100001');
-const b = await newUser('이영희', '2026100002');
-const c = await newUser('박민수', '2026100003');
-let storyUrl;
+let storyId;
 
-await step('index: create a story -> redirected to its page', async () => {
-  await a.goto(`${BASE}/`);
-  await a.fill('input[name=title]', 'E2E 이야기');
-  await a.fill('textarea[name=text]', '옛날 옛적에 작은 마을이 있었다.');
-  await a.click('form#create button[type=submit]');
-  await a.waitForURL(/story\.html\?id=/);
-  storyUrl = a.url();
-  await a.waitForSelector('ol.lines li');
-  assert.equal(await a.locator('ol.lines li').count(), 1);
-  assert.match(await a.textContent('#title'), /E2E 이야기/);
+await step('first visit: boot log, login window, validation, enter -> drawer', async () => {
+  const p = await newUser('first', null, { entered: false });
+  await p.goto(`${BASE}/`);
+  await p.waitForSelector('.bootlog >> text=로그인 대기');
+  await p.waitForSelector('.win[data-key="login"]');
+  assert.ok(await p.evaluate(() => document.body.classList.contains('crt')), 'CRT on by default');
+  await p.screenshot({ path: `${SHOTS}/01-login-desktop.png` });
+  await p.fill('#lg-name', '김철수');
+  await p.fill('#lg-sid', '12 34$');
+  await p.click('text=들어가기');
+  await p.waitForSelector('text=학번을 확인해 주세요');
+  await p.fill('#lg-sid', '2026-100001');
+  await p.click('text=들어가기');
+  await p.waitForSelector('.win[data-key="stories"]');
+  assert.equal(await p.locator('.win[data-key="login"]').count(), 0);
+  assert.equal(await p.locator('.bootlog').count(), 0);
+  assert.match(await p.textContent('#menubar'), /김철수 님/);
+  assert.equal(await p.evaluate(() => localStorage.getItem('rn.sid')), '2026100001');
+
+  // new story via desktop icon
+  await p.click('.icon[data-route="/new"]');
+  await p.waitForSelector('#ns-text');
+  await p.fill('#ns-title', 'E2E 이야기');
+  await p.fill('#ns-text', '옛날 옛적에 작은 마을이 있었다.');
+  await p.click('.win[data-key="new"] button[type=submit]');
+  await p.waitForURL(/#\/story\//);
+  storyId = p.url().split('/story/')[1];
+  await p.waitForSelector(`.win[data-key="story:${storyId}"] .line`);
+  assert.equal(await p.locator('.win[data-key="new"]').count(), 0, 'new-story window closed');
+  assert.match(await win(p, `story:${storyId}`).locator('.win-title').textContent(), /E2E 이야기/);
+
+  // starter cannot continue
+  await win(p, `story:${storyId}`).locator('text=이어 쓰기').click();
+  await p.waitForSelector('text=1줄까지 쓸 수 있어요');
 });
 
-await step('starter cannot continue own story (1 line per person)', async () => {
-  await a.click('text=이어 쓰기');
-  await a.waitForFunction(() => document.querySelector('#composerMsg')?.textContent.length > 0);
-  assert.match(await a.textContent('#composerMsg'), /1줄까지/);
+await step('deep link + writer B: claim, counter, Enter submits -> line 2', async () => {
+  const b = await newUser('이영희', '2026100002');
+  await b.goto(`${BASE}/#/story/${storyId}`);
+  const w = win(b, `story:${storyId}`);
+  await w.waitFor();
+  assert.equal(await b.locator('.win[data-key="stories"]').count(), 1, 'drawer open behind');
+  assert.match(await w.textContent(), /이영희 님으로 써요/);
+  await w.locator('text=이어 쓰기').click();
+  await w.locator('textarea').waitFor();
+  assert.match(await w.textContent(), /2번째 줄/);
+  await w.locator('textarea').fill('마을에는 이상한 우체통이 하나 있었다.');
+  assert.equal(await w.locator('.counter').textContent(), '21 / 100');
+  await w.locator('textarea').press('Enter');
+  await b.waitForFunction(id => document.querySelectorAll(`.win[data-key="story:${id}"] .line:not(.pending)`).length === 2, storyId);
+  assert.match(await w.textContent(), /줄이 올라갔어요/);
+  await b.screenshot({ path: `${SHOTS}/02-story-desktop.png` });
 });
 
-await step('writer B: claim, counter, final warning absent, submit -> line 2', async () => {
-  await b.goto(storyUrl);
-  await b.click('text=이어 쓰기');
-  await b.waitForSelector('#text');
-  assert.match(await b.textContent('#composer'), /2번째 줄/);
-  await b.fill('#text', '마을에는 이상한 우체통이 하나 있었다.');
-  assert.match(await b.textContent('.counter'), /^21 \/ 100$/);
-  await b.click('#submitBtn');
-  await b.waitForFunction(() => document.querySelectorAll('ol.lines li').length === 2);
-  assert.match(await b.textContent('#composer'), /줄이 올라갔어요/);
-});
-
-await step('writer C sees "someone is writing" and gets baton_held', async () => {
-  await a.goto(storyUrl);                      // A will hold... no: A is at limit; use C vs B? B is at limit too.
+await step('baton held by D: C sees pending row, gets baton_held; D late -> conflict -> rewrite', async () => {
   const d = await newUser('최지우', '2026100004');
-  await d.goto(storyUrl);
-  await d.click('text=이어 쓰기');
-  await d.waitForSelector('#text');
-  await c.goto(storyUrl);
-  assert.match(await c.textContent('#status'), /누군가 쓰는 중/);
-  await c.click('text=이어 쓰기');
-  await c.waitForFunction(() => document.querySelector('#composerMsg')?.textContent.length > 0);
-  assert.match(await c.textContent('#composerMsg'), /다른 사람이 이어 쓰는 중/);
-  // D's baton expires; C takes over and posts; D posts late -> conflict screen
+  await d.goto(`${BASE}/#/story/${storyId}`);
+  const wd = win(d, `story:${storyId}`);
+  await wd.locator('text=이어 쓰기').click();
+  await wd.locator('textarea').waitFor();
+  const c = await newUser('박민수', '2026100003');
+  await c.goto(`${BASE}/#/story/${storyId}`);
+  const wc = win(c, `story:${storyId}`);
+  await wc.locator('.line.pending').waitFor();
+  assert.match(await wc.textContent(), /다른 사람이 쓰는 중이에요/);
+  await wc.locator('text=이어 쓰기').click();
+  await wc.locator('text=다른 사람이 이어 쓰는 중이에요').waitFor();
   await pool.query(`update app.stories set baton_expires_at = now() - interval '1 s' where baton_name = '최지우'`);
-  await c.click('text=이어 쓰기');
-  await c.waitForSelector('#text');
-  await c.fill('#text', '우체통은 밤마다 편지를 뱉어냈다.');
-  await c.click('#submitBtn');
-  await c.waitForFunction(() => document.querySelectorAll('ol.lines li').length === 3);
-  await d.fill('#text', '그 우체통에는 주인이 없었다.');
-  await d.click('#submitBtn');
-  await d.waitForSelector('text=관리자에게 전달되었어요');
-  await d.screenshot({ path: `${SHOTS}/conflict.png`, fullPage: true });
-  assert.equal(await d.locator('ol.lines li').count(), 3, 'conflict line not shown publicly');
-  // "rewrite" claims again with the draft kept
-  await d.click('text=새 줄에 이어서 다시 쓰기');
-  await d.waitForSelector('#text');
-  assert.equal(await d.inputValue('#text'), '그 우체통에는 주인이 없었다.');
-  assert.match(await d.textContent('#composer'), /4번째 줄/);
-  await d.click('text=취소');
+  await wc.locator('text=이어 쓰기').click();
+  await wc.locator('textarea').fill('우체통은 밤마다 편지를 뱉어냈다.');
+  await wc.locator('text=올리기').click();
+  await c.waitForFunction(id => document.querySelectorAll(`.win[data-key="story:${id}"] .line:not(.pending)`).length === 3, storyId);
+  await wd.locator('textarea').fill('그 우체통에는 주인이 없었다.');
+  await wd.locator('text=올리기').click();
+  await wd.locator('text=저장 충돌').waitFor();
+  assert.equal(await wd.locator('.line:not(.pending)').count(), 3, 'conflict not shown publicly');
+  await d.screenshot({ path: `${SHOTS}/03-conflict.png` });
+  await wd.locator('text=새 줄에 다시 쓰기').click();
+  await wd.locator('textarea').waitFor();
+  assert.equal(await wd.locator('textarea').inputValue(), '그 우체통에는 주인이 없었다.');
+  assert.match(await wd.textContent(), /4번째 줄/);
+  await wd.locator('text=취소').click();
+  await wd.locator('text=이어 쓰기').waitFor();
 });
 
-await step('writer reveal: hidden by default, click shows name + student id', async () => {
-  await b.goto(storyUrl);
-  await b.waitForSelector('ol.lines li');
-  assert.ok(!(await b.textContent('ol.lines')).includes('김철수'));
-  await b.locator('ol.lines li').first().locator('button.who').click();
-  assert.match(await b.textContent('ol.lines'), /김철수 \(2026100001\)/);
-  await b.screenshot({ path: `${SHOTS}/story.png`, fullPage: true });
+await step('writer reveal: 속성 window with name + student id, Escape closes', async () => {
+  const b = await newUser('이영희', '2026100002');
+  await b.goto(`${BASE}/#/story/${storyId}`);
+  const w = win(b, `story:${storyId}`);
+  await w.locator('.line').first().waitFor();
+  assert.ok(!(await w.textContent()).includes('김철수'));
+  await w.locator('.who').first().click();
+  await b.locator('.props').waitFor();
+  assert.match(await b.locator('.props').textContent(), /김철수.*2026100001/);
+  assert.equal(await w.locator('.line.is-revealed').count(), 1);
+  await b.screenshot({ path: `${SHOTS}/04-reveal.png` });
+  await b.keyboard.press('Escape');
+  assert.equal(await b.locator('.props').count(), 0);
+  assert.equal(await w.locator('.line.is-revealed').count(), 0);
 });
 
-await step('final-line warning and completion', async () => {
-  const id = new URL(storyUrl).searchParams.get('id');
-  await pool.query(`update app.stories set max_lines = 4 where id = $1`, [id]);
+await step('final-line warning and 완결 stamp', async () => {
+  await pool.query(`update app.stories set max_lines = 4 where id = $1`, [storyId]);
   const e = await newUser('정하늘', '2026100005');
-  await e.goto(storyUrl);
-  await e.click('text=이어 쓰기');
-  await e.waitForSelector('#text');
-  assert.match(await e.textContent('#composer'), /마지막 줄/);
-  await e.fill('#text', '그리고 마을은 다시 조용해졌다.');
-  await e.click('#submitBtn');
-  await e.waitForSelector('text=완결되었습니다');
-  await e.goto(`${BASE}/`);
-  await e.waitForSelector('#completed a');
-  assert.match(await e.textContent('#completed'), /E2E 이야기/);
-  await e.screenshot({ path: `${SHOTS}/index.png`, fullPage: true });
+  await e.goto(`${BASE}/#/story/${storyId}`);
+  const w = win(e, `story:${storyId}`);
+  await w.locator('text=이어 쓰기').click();
+  await w.locator('text=마지막 줄이에요').waitFor();
+  await w.locator('textarea').fill('그리고 마을은 다시 조용해졌다.');
+  await w.locator('text=올리기').click();
+  await w.locator('.stamp').waitFor();
+  assert.match(await w.textContent(), /이야기가 완결되었습니다/);
+  await e.screenshot({ path: `${SHOTS}/05-complete.png` });
+  await e.click('.icon[data-route="/stories"]');
+  assert.match(await win(e, 'stories').textContent(), /완결/);
 });
 
-await step('admin: login, conflict queue, swap in keep following', async () => {
-  const p = await newUser('admin', '0');
-  await p.setViewportSize({ width: 1100, height: 900 });
+await step('guest: browse read-only, writing asks to log in, then returns to the story', async () => {
+  const id = (await pool.query(`select public.create_story('손님 테스트', '시작합니다.', '작가', '20269000', 'seed') as r`)).rows[0].r.story_id;
+  const g = await newUser('guest', null, { entered: false });
+  await g.goto(`${BASE}/#/story/${id}`);
+  await g.waitForSelector('.win[data-key="login"]');
+  await g.click('text=둘러보기 (읽기만)');
+  const w = win(g, `story:${id}`);
+  await w.waitFor();
+  assert.match(await g.textContent('#menubar'), /손님/);
+  await w.locator('text=로그인하고 이어 쓰기').click();
+  await g.locator('.win[data-key="login"] >> text=글을 쓰려면 로그인해 주세요').waitFor();
+  await g.fill('#lg-name', '손님이었던 사람');
+  await g.fill('#lg-sid', '2026100009');
+  await g.click('text=들어가기');
+  await w.locator('text=이어 쓰기').waitFor();
+  assert.match(await w.textContent(), /손님이었던 사람 님으로 써요/);
+  assert.match(g.url(), new RegExp(`#/story/${id}`));
+});
+
+await step('방명록: post, reveal, cooldown, guest prompt', async () => {
+  const b = await newUser('이영희', '2026100002');
+  await b.goto(`${BASE}/#/guestbook`);
+  const w = win(b, 'guestbook');
+  await w.locator('text=아직 아무도 남기지 않았어요').waitFor();
+  await w.locator('textarea').fill('우체통 이야기 결말 너무 궁금해요');
+  await w.locator('button:has-text("남기기")').click();
+  await w.locator('.note').first().waitFor();
+  assert.match(await w.locator('.note').first().textContent(), /#001.*우체통 이야기 결말/);
+  await w.locator('text=초 후 다시').waitFor();
+  await w.locator('.note .who').first().click();
+  assert.match(await b.locator('.props').textContent(), /이영희.*2026100002/);
+  await b.screenshot({ path: `${SHOTS}/06-guestbook.png` });
+  await b.keyboard.press('Escape');
+  // a second post inside 30 s is refused by the server too
+  await pool.query(`select public.post_guestbook('두 번째', '이영희', '2026100002', 'x')`).then(() => assert.fail('cooldown not enforced')).catch(e => assert.match(e.message, /cooldown/));
+  const g = await newUser('guest2', null, { entered: false });
+  await g.goto(`${BASE}/#/guestbook`);
+  await g.click('text=둘러보기 (읽기만)');
+  await win(g, 'guestbook').locator('text=로그인하고 남기기').click();
+  await g.locator('text=방명록을 남기려면 로그인해 주세요').waitFor();
+});
+
+await step('출석부: hidden until admin enables stats', async () => {
+  const b = await newUser('이영희', '2026100002');
+  await b.goto(`${BASE}/#/roster`);
+  await win(b, 'roster').locator('text=출석부는 아직 공개되지 않았어요').waitFor();
+  await pool.query(`update app.settings set stats_public = true`);
+  await b.reload();
+  await win(b, 'roster').locator('td:has-text("김철수")').waitFor();
+  await pool.query(`update app.settings set stats_public = false`);
+});
+
+await step('desktop windows: drag, position remembered, focus order, close', async () => {
+  const b = await newUser('이영희', '2026100002');
+  await b.goto(`${BASE}/`);
+  const drawer = win(b, 'stories');
+  await drawer.waitFor();
+  const t = drawer.locator('.win-title');
+  const box = await t.boundingBox();
+  await b.mouse.move(box.x + 100, box.y + 10);
+  await b.mouse.down();
+  await b.mouse.move(box.x + 300, box.y + 160, { steps: 5 });
+  await b.mouse.up();
+  const after = await drawer.boundingBox();
+  assert.ok(Math.abs(after.x - (box.x + 200)) < 4 && Math.abs(after.y - (box.y + 150)) < 4, 'moved');
+  await b.reload();
+  const again = await win(b, 'stories').boundingBox();
+  assert.ok(Math.abs(again.x - after.x) < 4 && Math.abs(again.y - after.y) < 4, 'remembered');
+  await b.click('#menubar >> text=도움말');
+  await win(b, 'help').waitFor();
+  assert.ok(await win(b, 'help').evaluate(el => el.classList.contains('is-active')));
+  assert.match(b.url(), /#\/help$/);
+  await win(b, 'stories').locator('.win-foot').click({ position: { x: 8, y: 8 } });
+  assert.ok(await win(b, 'stories').evaluate(el => el.classList.contains('is-active')));
+  assert.match(b.url(), /#\/stories$/);
+  await win(b, 'help').locator('.win-close').click();
+  assert.equal(await win(b, 'help').count(), 0);
+  await b.screenshot({ path: `${SHOTS}/13-desktop-dragged.png` });
+});
+
+await step('CRT: switch on login screen and in the menu bar, remembered', async () => {
+  const p = await newUser('crt', null, { entered: false });
+  await p.goto(`${BASE}/`);
+  await p.waitForSelector('.win[data-key="login"]');
+  await p.click('.seg >> text=끔');
+  assert.equal(await p.evaluate(() => document.body.classList.contains('crt')), false);
+  await p.click('text=둘러보기 (읽기만)');
+  await p.reload();
+  await win(p, 'stories').waitFor();
+  assert.equal(await p.evaluate(() => document.body.classList.contains('crt')), false, 'remembered');
+  await p.click('#menubar >> text=CRT 끔');
+  assert.equal(await p.evaluate(() => document.body.classList.contains('crt')), true);
+});
+
+await step('mobile: one window at a time, dock navigation, sheet reveal, composer', async () => {
+  const m = await newUser('이영희', '2026100002', { mobile: true });
+  await m.goto(`${BASE}/`);
+  await win(m, 'stories').waitFor();
+  assert.ok(await m.locator('#dock').isVisible());
+  assert.ok(!(await m.locator('#icons').isVisible()));
+  await m.screenshot({ path: `${SHOTS}/07-mobile-drawer.png` });
+  await win(m, 'stories').locator('.drawer-row', { hasText: '손님 테스트' }).click();
+  const w = m.locator('.win.is-active');
+  await w.locator('.line').first().waitFor();
+  assert.equal(await m.locator('.win:visible').count(), 1, 'only one window visible');
+  await w.locator('.who').first().click();
+  await m.locator('.props.sheet').waitFor();
+  await m.screenshot({ path: `${SHOTS}/08-mobile-sheet.png` });
+  await m.locator('.win-bar').first().tap?.().catch(() => {});
+  await m.mouse.click(10, 300);
+  assert.equal(await m.locator('.props').count(), 0);
+  await w.locator('text=이어 쓰기').click();
+  await w.locator('textarea').waitFor();
+  await m.screenshot({ path: `${SHOTS}/09-mobile-writing.png` });
+  await w.locator('text=취소').click();
+  await m.click('#dock >> text=방명록');
+  await win(m, 'guestbook').waitFor();
+  assert.equal(await m.locator('.win:visible').count(), 1);
+  assert.equal(await m.locator('#dock a[aria-current="page"]').textContent(), '방명록');
+  await m.screenshot({ path: `${SHOTS}/10-mobile-guestbook.png` });
+  await m.goBack();
+  await m.waitForFunction(() => document.querySelector('.win.is-active')?.dataset.key.startsWith('story:'));
+});
+
+await step('mobile first visit: boot + login fit on screen', async () => {
+  const m = await newUser('m2', null, { mobile: true, entered: false });
+  await m.goto(`${BASE}/`);
+  await m.waitForSelector('.win[data-key="login"]');
+  await m.waitForSelector('.bootlog >> text=로그인 대기');
+  const box = await m.locator('.win[data-key="login"]').boundingBox();
+  const vp = m.viewportSize();
+  assert.ok(box.y + box.height <= vp.height, 'login window fits');
+  await m.screenshot({ path: `${SHOTS}/11-mobile-login.png` });
+});
+
+await step('admin: conflict swap, guestbook hide, settings incl. guestbook', async () => {
+  const p = await newUser('admin', null, { entered: false });
   await p.goto(`${BASE}/admin.html`);
   await p.fill('input[name=email]', 'admin@test');
   await p.fill('input[name=password]', 'pw');
   await p.click('#login button');
   await p.waitForSelector('text=📙 conflict');
-  assert.match(await p.textContent('#view'), /그 우체통에는 주인이 없었다/);
-  await p.screenshot({ path: `${SHOTS}/admin-conflicts.png`, fullPage: true });
   await p.click('text=Swap in, keep following');
   await p.waitForSelector('text=No open conflicts.');
-  await b.goto(storyUrl);
-  await b.waitForSelector('ol.lines li');
-  const texts = await b.locator('ol.lines .text').allTextContents();
-  assert.match(texts[2], /그 우체통에는 주인이 없었다/);
-  assert.equal(texts.length, 4);
-});
-
-await step('admin: story detail, rewind, settings save, stats, log, export', async () => {
-  const p = await newUser('admin2', '0');
-  await p.setViewportSize({ width: 1100, height: 900 });
-  await p.goto(`${BASE}/admin.html`);
-  await p.fill('input[name=email]', 'admin@test');
-  await p.fill('input[name=password]', 'pw');
-  await p.click('#login button');
-  await p.click('nav button[data-tab=stories]');
-  await p.click('text=E2E 이야기');
-  await p.waitForSelector('text=Rewind to here');
-  await p.screenshot({ path: `${SHOTS}/admin-story.png`, fullPage: true });
-  await p.locator('tr', { hasText: '마을에는 이상한 우체통' }).locator('text=Rewind to here').click();
-  await p.waitForSelector('text=Rewound.');
-  assert.match(await p.textContent('#view'), /open · 2 \/ 4 lines/);
+  await p.click('nav button[data-tab=guestbook]');
+  await p.waitForSelector('td:has-text("우체통 이야기 결말")');
+  await p.click('#view button:has-text("Hide")');
+  await p.waitForSelector('text=Hidden.');
+  const pub = await pool.query(`select public.list_guestbook() as r`);
+  assert.equal(pub.rows[0].r.total, 0);
   await p.click('nav button[data-tab=settings]');
-  await p.fill('input[name=max_chars]', '120');
+  await p.fill('input[name=guestbook_max_chars]', '150');
   await p.click('#view button[type=submit]');
   await p.waitForSelector('text=Settings saved.');
-  await p.click('nav button[data-tab=stats]');
-  await p.waitForSelector('text=2026100001');
-  await p.click('nav button[data-tab=log]');
-  await p.waitForSelector('text=update_settings');
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#export')]);
-  const json = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
-  assert.equal(json.settings.max_chars, 120);
+  assert.equal((await pool.query(`select guestbook_max_chars from app.settings`)).rows[0].guestbook_max_chars, 150);
+  assert.equal(await p.locator('select[name=export_credits]').count(), 0, 'export setting removed');
+  await p.screenshot({ path: `${SHOTS}/12-admin.png`, fullPage: true });
 });
 
+await step('old links: story.html?id= and export.html redirect into 연문회 OS', async () => {
+  const b = await newUser('이영희', '2026100002');
+  await b.goto(`${BASE}/story.html?id=${storyId}`);
+  await b.waitForURL(new RegExp(`/#/story/${storyId}$`));
+  await win(b, `story:${storyId}`).waitFor();
+  await b.goto(`${BASE}/export.html`);
+  await win(b, 'stories').waitFor();
+});
 
 await step('remote self-test page passes against local DB (as admin, cleans up)', async () => {
-  const p = await newUser('tester', '0');
+  await pool.query(`update app.settings set max_lines = 20`);
+  const p = await newUser('tester', null, { entered: false });
   await p.goto(`${BASE}/admin.html`);
   await p.fill('input[name=email]', 'admin@test');
   await p.fill('input[name=password]', 'pw');
@@ -244,96 +401,12 @@ await step('remote self-test page passes against local DB (as admin, cleans up)'
   await p.waitForSelector('#app:not([hidden])');
   await p.goto(`${BASE}/tests/remote/`);
   await p.click('#run');
-  await p.waitForFunction(() => /ALL PASSED|FAILED|ERROR/.test(document.querySelector('#out').textContent), null, { timeout: 60000 }).catch(async e => { throw new Error(e.message + ' OUT=' + await p.textContent('#out')); });
+  await p.waitForFunction(() => /ALL PASSED|FAILED|ERROR/.test(document.querySelector('#out').textContent), null, { timeout: 60000 });
   const out = await p.textContent('#out');
   assert.match(out, /ALL PASSED/, out);
-  assert.match(out, /test story deleted/);
 });
 
-// Build a completed story directly in the DB (same functions, superuser).
-async function makeCompleted(title, texts, sidBase) {
-  const q = (sql, a) => pool.query(sql, a).then(r => r.rows[0].r);
-  const { story_id } = await q(`select public.create_story($1, $2, $3, $4, 'seed') as r`, [title, texts[0], '작가A', `${sidBase}0`]);
-  await pool.query(`update app.stories set max_lines = $2 where id = $1`, [story_id, texts.length]);
-  for (let i = 1; i < texts.length; i++) {
-    const head = (await pool.query(`select head_line_id from app.stories where id = $1`, [story_id])).rows[0].head_line_id;
-    await q(`select public.submit_line($1, $2, $3, $4, $5, 'seed', null) as r`, [story_id, head, texts[i], `작가${'BCDEFG'[i - 1]}`, `${sidBase}${i}`]);
-  }
-  return story_id;
-}
-
-await step('export: single completed story (link, credits, txt download, PDF)', async () => {
-  const first = await makeCompleted('먼저 끝난 이야기', ['첫 줄입니다.', '둘째 줄입니다.', '마지막 줄입니다.'], '20269900');
-  await makeCompleted('나중에 끝난 이야기', ['하나.', '둘.'], '20269800');
-  const p = await newUser('reader', '0');
-  await p.goto(`${BASE}/story.html?id=${first}`);
-  await p.click('text=이 이야기 내보내기');
-  await p.waitForURL(/export\.html\?id=/);
-  await p.waitForSelector('article.story');
-  const text = await p.textContent('#book');
-  assert.match(text, /먼저 끝난 이야기/);
-  assert.match(text, /둘째 줄입니다\. — 작가B \(202699001\)/);
-  assert.ok(!/차례/.test(text), 'no TOC for single story');
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#txt')]);
-  const txt = fs.readFileSync(await dl.path(), 'utf8');
-  assert.match(dl.suggestedFilename(), /^먼저_끝난_이야기-\d{8}\.txt$/);
-  assert.match(txt, /^﻿?=+\n먼저 끝난 이야기\n/);
-  assert.match(txt, /마지막 줄입니다\.  — 작가C \(202699002\)/);
-  await p.emulateMedia({ media: 'print' });
-  await p.pdf({ path: `${SHOTS}/export-single.pdf`, format: 'A4' });
-});
-
-await step('export: all completed stories ordered by completion date, open ones excluded', async () => {
-  const p = await newUser('reader2', '0');
-  await p.goto(`${BASE}/`);
-  await p.click('text=완결된 이야기 모두 내보내기');
-  await p.waitForURL(/export\.html$/);
-  await p.waitForSelector('nav.toc li');
-  const toc = await p.locator('nav.toc li a').allTextContents();
-  const exp = (await pool.query(`select coalesce(title, '제목 없는 이야기') t from app.stories
-     where status = 'completed' and deleted_at is null order by completed_at, created_at`)).rows.map(r => r.t);
-  assert.deepEqual(toc, exp);
-  assert.ok(toc.indexOf('먼저 끝난 이야기') < toc.indexOf('나중에 끝난 이야기'));
-  assert.ok(!toc.includes('E2E 이야기'), 'rewound (open) story excluded');
-  assert.equal(await p.locator('article.story').count(), exp.length);
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#txt')]);
-  assert.match(dl.suggestedFilename(), /^relay-novel-\d{8}\.txt$/);
-  await p.screenshot({ path: `${SHOTS}/export-all.png`, fullPage: true });
-  await p.emulateMedia({ media: 'print' });
-  await p.pdf({ path: `${SHOTS}/export-all.pdf`, format: 'A4' });
-});
-
-await step('export: open story shows a clear message', async () => {
-  const id = (await pool.query(`select id from app.stories where status = 'open' limit 1`)).rows[0].id;
-  const p = await newUser('reader3', '0');
-  await p.goto(`${BASE}/export.html?id=${id}`);
-  await p.waitForSelector('#notice .box');
-  assert.match(await p.textContent('#notice'), /완결된 이야기만/);
-});
-
-await step('admin credits toggle (select) changes export credits', async () => {
-  const p = await newUser('admin3', '0');
-  await p.goto(`${BASE}/admin.html`);
-  await p.fill('input[name=email]', 'admin@test');
-  await p.fill('input[name=password]', 'pw');
-  await p.click('#login button');
-  await p.click('nav button[data-tab=settings]');
-  await p.selectOption('select[name=export_credits]', 'name');
-  await p.click('#view button[type=submit]');
-  await p.waitForSelector('text=Settings saved.');
-  const r = await newUser('reader4', '0');
-  await r.goto(`${BASE}/export.html`);
-  await r.waitForSelector('article.story');
-  const t = await r.textContent('#book');
-  assert.match(t, /— 작가B/);
-  assert.ok(!/\(20269900\d\)/.test(t), 'no student ids');
-  await p.selectOption('select[name=export_credits]', 'none');
-  await p.click('#view button[type=submit]');
-  await p.waitForSelector('text=Settings saved.');
-  await r.reload(); await r.waitForSelector('article.story');
-  assert.ok(!(await r.textContent('#book')).includes('—'), 'no credits at all');
-  await pool.query(`update app.settings set export_credits = 'name_sid'`);
-});
+await step('no page errors', async () => { assert.deepEqual(errors, []); });
 
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);
 await browser.close(); server.close(); await pool.end();

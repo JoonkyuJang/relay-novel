@@ -1,5 +1,4 @@
-// The only file that talks to the backend. The stage-2 UI can be rebuilt
-// freely on top of these functions.
+// The only file that talks to the backend (plus small local-storage helpers).
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -43,6 +42,12 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } },
 };
+export const prefs = {
+  get: (k, d = null) => { const v = store.get(`rn.${k}`); return v == null ? d : v; },
+  set: (k, v) => store.set(`rn.${k}`, v == null ? null : String(v)),
+  getJSON: (k) => { try { return JSON.parse(store.get(`rn.${k}`)); } catch { return null; } },
+  setJSON: (k, v) => store.set(`rn.${k}`, v == null ? null : JSON.stringify(v)),
+};
 
 export function clientToken() {
   let t = store.get('rn.client');
@@ -53,16 +58,21 @@ export function clientToken() {
   return t;
 }
 
+// Honor-system identity, kept on this device only.
 export function getIdentity() {
-  return { name: store.get('rn.name') ?? '', studentId: store.get('rn.sid') ?? '' };
+  const name = store.get('rn.name'); const studentId = store.get('rn.sid');
+  return name && studentId ? { name, studentId } : null;
 }
 export function setIdentity({ name, studentId }) {
-  store.set('rn.name', name);
-  store.set('rn.sid', studentId);
+  store.set('rn.name', name); store.set('rn.sid', studentId); store.set('rn.guest', null);
 }
+export function logout() { store.set('rn.name', null); store.set('rn.sid', null); store.set('rn.guest', null); }
+export const isGuest = () => store.get('rn.guest') === '1';
+export const setGuest = () => store.set('rn.guest', '1');
+export const hasEntered = () => !!getIdentity() || isGuest();
 
-export function getDraft(storyId) { return store.get(`rn.draft.${storyId}`) ?? ''; }
-export function setDraft(storyId, text) { store.set(`rn.draft.${storyId}`, text || null); }
+export function getDraft(key) { return store.get(`rn.draft.${key}`) ?? ''; }
+export function setDraft(key, text) { store.set(`rn.draft.${key}`, text || null); }
 
 // ---------------------------------------------------------------- text rules (mirror the server)
 
@@ -72,6 +82,16 @@ export function cleanLine(s) {
 export function countChars(s) {
   return [...cleanLine(s)].length;           // code points, same as Postgres char_length
 }
+export function cleanName(s) { return cleanLine(s); }
+export function cleanStudentId(s) {
+  return (s ?? '').normalize('NFKC').replace(/[\s-]/g, '').toUpperCase();
+}
+export function identityProblem({ name, studentId }) {
+  const n = [...cleanName(name)].length;
+  if (n < 1 || n > 20) return 'invalid_name';
+  if (!/^[0-9A-Z]{1,20}$/.test(cleanStudentId(studentId))) return 'invalid_student_id';
+  return null;
+}
 
 // ---------------------------------------------------------------- public API
 
@@ -80,17 +100,13 @@ export const listStories = () => call('list_stories');
 export const getStory = (storyId) => call('get_story', { p_story_id: storyId });
 export const publicStats = () => call('public_stats');
 
-// Completed stories for export: one (storyId) or all, ordered by completion.
-// -> { exported_at, credits: 'name_sid'|'name'|'none', stories: [{ id, title, created_at, completed_at,
-//      lines: [{ position, text, author_name, student_id }] }] }
-export const exportStories = (storyId = null) =>
-  call('export_stories', storyId ? { p_story_id: storyId } : {});
-
-export function createStory({ title, text, name, studentId }) {
-  return call('create_story', {
+export async function createStory({ title, text, name, studentId }) {
+  const r = await call('create_story', {
     p_title: title ?? null, p_text: text, p_name: name, p_student_id: studentId,
     p_client: clientToken(),
   });
+  poke(['list']);
+  return r;
 }
 
 export function claimBaton(storyId, { name, studentId }) {
@@ -115,31 +131,66 @@ export function releaseBatonOnUnload(storyId, token) {
 
 // -> { result: 'accepted', line_id, position, story_status }
 //  | { result: 'conflict', line_id, position, reason: 'stale_parent' | 'baton_taken' }
-export function submitLine(storyId, { parentId, text, name, studentId, token }) {
-  return call('submit_line', {
+export async function submitLine(storyId, { parentId, text, name, studentId, token }) {
+  const r = await call('submit_line', {
     p_story_id: storyId, p_parent_id: parentId, p_text: text,
     p_name: name, p_student_id: studentId, p_client: clientToken(), p_token: token ?? null,
   });
+  poke(['list']);
+  return r;
 }
 
-// ---------------------------------------------------------------- live updates
+// 방명록 -> { total, items: [{ id, no, text, author_name, student_id, created_at }], has_more }
+export const listGuestbook = ({ before = null, limit = 30 } = {}) =>
+  call('list_guestbook', { p_before: before, p_limit: limit });
+export function postGuestbook(text, { name, studentId }) {
+  return call('post_guestbook', { p_text: text, p_name: name, p_student_id: studentId, p_client: clientToken() });
+}
 
-// Calls onChange() (debounced) whenever one of `keys` changes on the server,
-// plus a slow poll and on tab focus as a safety net. Returns an unsubscribe fn.
-export function watch(keys, onChange, { pollMs = 20000, onStatus } = {}) {
-  let t = null;
-  const fire = () => { clearTimeout(t); t = setTimeout(onChange, 250); };
-  const ch = sb.channel(`signals-${Math.random().toString(36).slice(2)}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'realtime_signals' },
-      (p) => { if (keys.includes(p.new?.key)) fire(); })
-    .subscribe((status) => onStatus?.(status));
-  const timer = setInterval(fire, pollMs);
-  const onVis = () => { if (!document.hidden) fire(); };
-  document.addEventListener('visibilitychange', onVis);
-  return () => {
-    sb.removeChannel(ch); clearInterval(timer); clearTimeout(t);
-    document.removeEventListener('visibilitychange', onVis);
-  };
+// Refresh this tab's own windows right after its own writes (no need to wait for Realtime).
+export function poke(keys) {
+  for (const s of subscribers) if (s.keys.some(k => keys.includes(k))) notify(s);
+}
+
+// ---------------------------------------------------------------- live updates (one shared channel)
+
+const subscribers = new Set();
+let channel = null;
+let pollTimer = null;
+const POLL_MS = 20000;
+
+function notify(sub) {
+  clearTimeout(sub.t);
+  sub.t = setTimeout(() => sub.fn(), 250);
+}
+function ensureChannel() {
+  if (channel) return;
+  channel = sb.channel('signals')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'realtime_signals' }, (p) => {
+      const key = p.new?.key;
+      for (const s of subscribers) if (s.keys.includes(key)) notify(s);
+    })
+    .subscribe();
+  // Safety net: slow poll while visible, and refresh on returning to the tab.
+  pollTimer = setInterval(() => { if (!document.hidden) subscribers.forEach(notify); }, POLL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) subscribers.forEach(notify); });
+}
+
+// Calls fn() (debounced) whenever one of `keys` changes on the server. Returns unsubscribe.
+export function watch(keys, fn) {
+  ensureChannel();
+  const sub = { keys, fn, t: null };
+  subscribers.add(sub);
+  return () => { clearTimeout(sub.t); subscribers.delete(sub); };
+}
+
+// Number of people with the site open right now (Realtime presence). Calls onCount(n).
+export function presence(onCount) {
+  try {
+    const ch = sb.channel('lobby', { config: { presence: { key: clientToken() } } });
+    ch.on('presence', { event: 'sync' }, () => onCount(Object.keys(ch.presenceState()).length))
+      .subscribe((status) => { if (status === 'SUBSCRIBED') ch.track({ at: Date.now() }).catch(() => {}); });
+  } catch { /* optional */ }
 }
 
 // ---------------------------------------------------------------- admin
@@ -172,4 +223,6 @@ export const admin = {
   stats:             ()            => call('admin_stats'),
   log:               (limit = 100) => call('admin_log_recent', { p_limit: limit }),
   exportAll:         ()            => call('admin_export'),
+  listGuestbook:     ()            => call('admin_list_guestbook', {}),
+  setGuestbookDeleted: (id, deleted) => call('admin_set_guestbook_deleted', { p_id: id, p_deleted: deleted }),
 };

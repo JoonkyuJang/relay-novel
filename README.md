@@ -28,16 +28,25 @@ Static frontend on GitHub Pages + a Supabase (Postgres) backend.
 ## Files
 
 ```
-index.html, story.html, admin.html   pages (UI language: Korean / admin: English)
-export.html                         export completed stories: ?id=<story> or all (print to PDF / .txt)
-js/api.js                           the ONLY file that talks to the backend
+index.html                          연문회 OS (single page: boot → login → windows; routes #/stories, #/story/<id>,
+                                    #/new, #/roster, #/guestbook, #/help)
+admin.html                          admin console (English)
+story.html, export.html             redirects for old links
+css/base.css                        the whole visual system (tokens, windows, mobile layout, CRT)
+fonts/                              Neo둥근모 + 갈무리11 (subset), OFL — see fonts/README.md
+js/api.js                           the ONLY file that talks to the backend (+ local identity/prefs)
+js/wm.js                            window manager: draggable windows on desktop, one window at a time on phones
+js/index.js                         app shell: boot, login, menu bar, icons/dock, routing, presence
+js/views/*.js                       one file per window
 js/config.js                        project URL + publishable key (safe to publish)
-js/ui.js, js/*.js                   page logic
 js/vendor/                          supabase-js 2.117.3 (MIT), vendored
 supabase/migrations/                database schema + functions (applied by the GitHub integration)
 tests/local/                        local Postgres test suite + browser e2e (for development)
 tests/remote/                       concurrency test against the live project (browser or Node)
 ```
+
+Login is honor-system: name + student number are stored only in the visitor's browser and
+sent with each write. "둘러보기" lets people read without logging in.
 
 ## Setup (one time)
 
@@ -63,7 +72,7 @@ Never edit an applied migration. Add a new file
 
 ```
 cd tests/local && npm install
-npm test        # resets a local DB, applies migrations, runs run.mjs (22 checks incl. races)
-npm run e2e     # browser flows with Playwright against the same local DB (13 checks)
+npm test        # resets a local DB, applies migrations, runs run.mjs (25 checks incl. races)
+npm run e2e     # browser flows with Playwright against the same local DB (16 flows, desktop + phone)
 ```
 `reset.sh` expects a local server on socket `/var/lib/postgresql/rn`, port 5433.

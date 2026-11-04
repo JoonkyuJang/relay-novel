@@ -337,5 +337,49 @@ await test('export credits toggle: name_sid / name / none (server-side)', async 
   assert.equal((await admin('admin_get_settings')).export_credits, 'name_sid');
 });
 
+await test('guestbook: post, validation, newest first, paging, hidden student id', async () => {
+  await expectErr(rpc('post_guestbook', { p_text: '  ', ...who(2000) }), 'empty_text');
+  await expectErr(rpc('post_guestbook', { p_text: '가'.repeat(201), ...who(2000) }), 'too_long');
+  for (let i = 0; i < 5; i++) await rpc('post_guestbook', { p_text: `방명록 ${i}\n줄바꿈`, ...who(2001 + i) });
+  const page = await rpc('list_guestbook', { p_limit: 3 });
+  assert.equal(page.total, 5); assert.equal(page.items.length, 3); assert.equal(page.has_more, true);
+  assert.equal(page.items[0].text, '방명록 4 줄바꿈');
+  assert.ok(page.items[0].no > page.items[1].no);
+  const next = await rpc('list_guestbook', { p_before: page.items[2].no, p_limit: 3 });
+  assert.equal(next.items.length, 2); assert.equal(next.has_more, false);
+  assert.equal(page.items[0].student_id, '2026002005');
+  await admin('admin_update_settings', { p: { show_student_id: false } });
+  assert.equal((await rpc('list_guestbook', {})).items[0].student_id, null);
+  await admin('admin_update_settings', { p: { show_student_id: true } });
+});
+
+await test('guestbook: 30 s cooldown per student id and per device (race-safe)', async () => {
+  const e = await expectErr(rpc('post_guestbook', { p_text: '또', ...who(2001) }), 'cooldown');
+  assert.ok(JSON.parse(e.detail).wait > 0);
+  await expectErr(rpc('post_guestbook', { p_text: '다른 학번, 같은 기기', ...who(2999), p_client: 'client-2001' }), 'cooldown');
+  const res = await Promise.allSettled(Array.from({ length: 10 }, () =>
+    rpc('post_guestbook', { p_text: '연타', ...who(3000) })));
+  assert.equal(res.filter(r => r.status === 'fulfilled').length, 1);
+  await su(`update app.guestbook set created_at = created_at - interval '31 seconds'`);
+  await rpc('post_guestbook', { p_text: '이제 됨', ...who(2001) });
+});
+
+await test('guestbook: admin hide/restore, closed setting, length setting, export', async () => {
+  const all = await admin('admin_list_guestbook', {});
+  assert.ok(all[0].student_id && all[0].client_token);
+  await admin('admin_set_guestbook_deleted', { p_id: all[0].id, p_deleted: true });
+  assert.ok(!(await rpc('list_guestbook', {})).items.some(i => i.id === all[0].id));
+  await admin('admin_set_guestbook_deleted', { p_id: all[0].id, p_deleted: false });
+  await admin('admin_update_settings', { p: { guestbook_open: false } });
+  await expectErr(rpc('post_guestbook', { p_text: 'x', ...who(4000) }), 'guestbook_closed');
+  await admin('admin_update_settings', { p: { guestbook_open: true, guestbook_max_chars: 5 } });
+  await expectErr(rpc('post_guestbook', { p_text: '여섯 글자요', ...who(4000) }), 'too_long');
+  await admin('admin_update_settings', { p: { guestbook_max_chars: 200 } });
+  const s = await rpc('get_public_settings');
+  assert.equal(s.guestbook_max_chars, 200); assert.equal(s.guestbook_cooldown_seconds, 30);
+  assert.ok((await admin('admin_export')).guestbook.length >= 7);
+  await assert.rejects(rpc('admin_list_guestbook', {}), /permission denied/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);
 await pool.end();

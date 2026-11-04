@@ -1,4 +1,4 @@
-// Small DOM + text helpers shared by the barebones pages.
+// Small DOM + text helpers shared by every page.
 
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -6,10 +6,11 @@ export function h(tag, attrs = {}, ...children) {
     if (v == null || v === false) continue;
     if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
     else if (k === 'class') el.className = v;
-    else if (k in el && k !== 'list') el[k] = v;
+    else if (k === 'dataset') Object.assign(el.dataset, v);
+    else if (k in el && k !== 'list' && !k.includes('-')) el[k] = v;
     else el.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of children.flat()) {
+  for (const c of children.flat(Infinity)) {
     if (c == null || c === false) continue;
     el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
@@ -18,15 +19,97 @@ export function h(tag, attrs = {}, ...children) {
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 
-export function fmtTime(ts) {
-  if (!ts) return '';
-  return new Date(ts).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+// ------------------------------------------------------------ pixel icons (static, trusted markup)
+
+const ICONS = {
+  logo:   '<path d="M8 1l7 7-7 7-7-7z" fill="currentColor"/><path d="M8 5l3 3-3 3-3-3z" fill="#FFF9EF"/>',
+  folder: '<path data-fill d="M1.5 4.5h5l1 1h7v9h-13z" fill="#FFF9EF" stroke="currentColor"/><path d="M1.5 6.5h13" stroke="currentColor"/>',
+  newdoc: '<path data-fill d="M3.5 1.5h7l3 3v10h-10z" fill="#FFF9EF" stroke="currentColor"/><path d="M10.5 1.5v3h3" fill="none" stroke="currentColor"/><path d="M5 12l1-3 4-4 2 2-4 4z" fill="currentColor"/>',
+  roster: '<path data-fill d="M2.5 2.5h11v12h-11z" fill="#FFF9EF" stroke="currentColor"/><path d="M6 1h4v3H6z" fill="currentColor"/><path d="M4 6.5h2M7 6.5h5M4 9.5h2M7 9.5h5M4 12.5h2M7 12.5h5" stroke="currentColor"/>',
+  book:   '<path data-fill d="M1.5 3.5h6v10h-6zM8.5 3.5h6v10h-6z" fill="#FFF9EF" stroke="currentColor"/><path d="M3 6.5h3M3 8.5h3M3 10.5h2M10 6.5h3M10 8.5h3" stroke="currentColor"/><path d="M7.5 14.5h1" stroke="currentColor"/>',
+  person: '<path d="M5.5 1.5h5v5h-5z"/><path d="M2.5 14.5v-4l2-2h7l2 2v4z"/>',
+  hourglass: '<path d="M3 1.5h10M3 14.5h10" stroke="currentColor"/><path d="M4.5 1.5h7L8 8l3.5 6.5h-7L8 8z" fill="#FFF9EF" stroke="currentColor"/><path d="M6 13.5h4L8 10.5z" fill="currentColor"/>',
+  warn:   '<path d="M8 1.5l6.5 12.5h-13z" fill="#FFF9EF" stroke="currentColor"/><path d="M7.5 6h1v4h-1zM7.5 11h1v1h-1z" fill="currentColor" stroke="currentColor"/>',
+  disk:   '<path d="M2.5 2.5h8l3 3v8h-11z" fill="#FFF9EF" stroke="currentColor"/><path d="M5 5h5v3H5z" fill="currentColor"/><path d="M4.5 10.5h7" stroke="currentColor"/>',
+};
+export function icon(name, size = 16) {
+  const t = document.createElement('template');
+  t.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">${ICONS[name]}</svg>`;
+  return t.content.firstChild;
 }
 
+// ------------------------------------------------------------ time
+
+export function fmtTime(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+export function fmtClock(d = new Date()) {
+  return `${d.toLocaleDateString('ko-KR', { weekday: 'short' })} ${d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })}`;
+}
 export function fmtCountdown(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+export function relTime(ts, now = Date.now()) {
+  if (!ts) return '';
+  const diff = (now - Date.parse(ts)) / 1000;
+  if (diff < 60) return '방금';
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  if (diff < 172800) return '어제';
+  const d = new Date(ts);
+  return `${d.getMonth() + 1}.${d.getDate()}`;
+}
+
+// ------------------------------------------------------------ properties popup (desktop) / sheet (phone)
+
+let openProps = null;
+const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
+
+export function closeProps() {
+  if (!openProps) return;
+  const { el, anchor, onClose } = openProps;
+  openProps = null;
+  el.remove();
+  anchor?.setAttribute('aria-expanded', 'false');
+  onClose?.();
+  document.removeEventListener('pointerdown', outside, true);
+  document.removeEventListener('keydown', onEsc, true);
+}
+function outside(e) {
+  if (!openProps) return;
+  if (openProps.el.contains(e.target) || openProps.anchor?.contains(e.target)) return;
+  closeProps();
+}
+function onEsc(e) { if (e.key === 'Escape') { const a = openProps?.anchor; closeProps(); a?.focus(); } }
+
+// Toggle a small "속성" window for `anchor`. rows: [[label, value], …]
+export function toggleProps(anchor, title, rows, onClose) {
+  if (openProps?.anchor === anchor) { closeProps(); return; }
+  closeProps();
+  const phone = isPhone();
+  const el = h('div', { class: `props${phone ? ' sheet' : ''}`, role: 'dialog', 'aria-label': title },
+    h('div', { class: 'props-title stripes' }, h('span', {}, title)),
+    h('dl', {}, rows.filter(r => r[1] != null && r[1] !== '').map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])));
+  document.body.append(el);
+  if (!phone) {
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth, ht = el.offsetHeight;
+    let left = r.right + 10, top = r.top - 6;
+    if (left + w > innerWidth - 8) left = Math.max(8, r.left - w - 10);
+    if (top + ht > innerHeight - 8) top = Math.max(36, innerHeight - ht - 8);
+    el.style.left = `${left}px`; el.style.top = `${top}px`;
+  }
+  anchor.setAttribute('aria-expanded', 'true');
+  openProps = { el, anchor, onClose };
+  setTimeout(() => {
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', onEsc, true);
+  });
+}
+
+// ------------------------------------------------------------ messages
 
 const MESSAGES = {
   network:             () => '서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.',
@@ -35,17 +118,19 @@ const MESSAGES = {
   invalid_name:        () => '이름을 1~20자로 입력해 주세요.',
   invalid_student_id:  () => '학번을 확인해 주세요. (숫자/영문, 20자 이내)',
   empty_text:          () => '내용을 입력해 주세요.',
-  too_long:            (d) => `한 줄은 최대 ${d?.max}자까지 쓸 수 있어요.`,
+  too_long:            (d) => `최대 ${d?.max}자까지 쓸 수 있어요.`,
   title_too_long:      (d) => `제목은 최대 ${d?.max}자까지 쓸 수 있어요.`,
   story_limit:         (d) => `이야기는 한 사람당 ${d?.max}개까지 시작할 수 있어요.`,
   story_not_found:     () => '이야기를 찾을 수 없어요.',
   story_closed:        () => '이미 완결된 이야기예요.',
-  story_not_completed: () => '완결된 이야기만 내보낼 수 있어요.',
   baton_held:          () => '다른 사람이 이어 쓰는 중이에요. 잠시 후 다시 시도해 주세요.',
   person_limit:        (d) => `이 이야기에는 한 사람당 ${d?.max}줄까지 쓸 수 있어요.`,
   invalid_parent:      () => '이야기가 바뀌었어요. 새로고침해 주세요.',
   too_many_conflicts:  () => '관리자 확인을 기다리는 줄이 너무 많아요.',
-  stats_hidden:        () => '통계는 아직 공개되지 않았어요.',
+  stats_hidden:        () => '출석부는 아직 공개되지 않았어요.',
+  guestbook_closed:    () => '지금은 방명록이 닫혀 있어요.',
+  cooldown:            (d) => `${d?.wait ?? 30}초 뒤에 다시 남길 수 있어요.`,
+  not_found:           () => 'Not found.',
   not_admin:           () => 'This account is not an admin.',
   permission_denied:   () => 'Permission denied.',
   login_failed:        (d) => `Login failed: ${d?.message ?? ''}`,

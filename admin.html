@@ -6,13 +6,12 @@
   <title>Relay Novel Admin</title>
   <meta name="robots" content="noindex">
   <link rel="stylesheet" href="css/base.css">
-  <style> body { max-width: 1100px; } </style>
   <script src="js/vendor/supabase-js-2.117.3.umd.js"></script>
   <script type="module" src="js/admin.js"></script>
 </head>
-<body>
-  <p><a href="./">← site</a></p>
-  <h1>Admin</h1>
+<body class="page">
+  <p><a href="./">← 연문회 OS</a></p>
+  <h1>연문회 OS · Admin</h1>
   <div id="notice"></div>
 
   <form id="login" class="box" hidden>
@@ -25,12 +24,13 @@
     <div class="row">
       <span id="who" class="muted"></span>
       <button id="logout">Log out</button>
-      <button id="export">Export all (JSON)</button>
+      <button id="export">Backup (JSON)</button>
     </div>
     <nav class="tabs row" style="margin-top:12px">
       <button data-tab="conflicts">Conflicts</button>
       <button data-tab="stories">Stories</button>
       <button data-tab="settings">Settings</button>
+      <button data-tab="guestbook">방명록</button>
       <button data-tab="stats">Contributors</button>
       <button data-tab="log">Log</button>
     </nav>

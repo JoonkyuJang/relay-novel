@@ -4,7 +4,7 @@ import { h, $, fmtTime, errorText } from './ui.js';
 const A = api.admin;
 let tab = 'conflicts';
 let detailId = null;
-const watchKeys = ['admin', 'list', 'settings'];
+const watchKeys = ['admin', 'list', 'settings', 'guestbook'];
 
 const notice = (text, cls = 'bad') =>
   $('#notice').replaceChildren(...(text ? [h('div', { class: `box ${cls}` }, text)] : []));
@@ -67,7 +67,7 @@ async function viewStories() {
 
 function openStory(id) {
   detailId = id;
-  watchKeys.splice(3, watchKeys.length, id);
+  watchKeys.splice(4, watchKeys.length, id);
   tab = 'stories';
   render();
 }
@@ -125,7 +125,7 @@ async function viewStoryDetail() {
 
   return h('div', {},
     h('p', {}, h('a', { href: '#', onclick: (e) => { e.preventDefault(); detailId = null; render(); } }, '← all stories'),
-      ' · ', h('a', { href: `story.html?id=${s.id}`, target: '_blank' }, 'public page')),
+      ' · ', h('a', { href: `./#/story/${s.id}`, target: '_blank' }, 'public page')),
     h('h2', {}, s.title || '(untitled)', s.deleted_at ? ' [deleted]' : ''),
     h('p', {}, `${s.status} · ${s.line_count} / ${s.max_lines} lines · max ${s.max_chars} chars`,
       s.baton ? ` · ✍️ ${person(s.baton.name, s.baton.student_id)} until ${fmtTime(s.baton.expires_at)}` : ''),
@@ -164,8 +164,9 @@ const SETTINGS = [
   ['show_student_id', 'Show student IDs in writer reveal', 'checkbox'],
   ['stats_public', 'Contributor stats public', 'checkbox'],
   ['likes_enabled', 'Likes enabled (stage 2)', 'checkbox'],
-  ['export_credits', 'Credits in exports', 'select',
-    [['name_sid', 'Name + student ID'], ['name', 'Name only'], ['none', 'No credits']]],
+  ['guestbook_open', '방명록 open', 'checkbox'],
+  ['guestbook_max_chars', '방명록 characters per message', 'number'],
+  ['guestbook_cooldown_seconds', '방명록 cooldown per person (seconds)', 'number'],
 ];
 
 async function viewSettings() {
@@ -215,7 +216,24 @@ async function viewLog() {
 
 // ------------------------------------------------------------ shell
 
-const VIEWS = { conflicts: viewConflicts, stories: viewStories, settings: viewSettings, stats: viewStats, log: viewLog };
+// ------------------------------------------------------------ guestbook
+
+async function viewGuestbook() {
+  const rows = await A.listGuestbook();
+  if (!rows.length) return h('p', { class: 'muted' }, 'No messages yet.');
+  return h('table', {},
+    h('tr', {}, ['#', 'Message', 'Author', 'Device', 'Time', ''].map(t => h('th', {}, t))),
+    rows.map(g => h('tr', { class: g.deleted_at ? 'deleted' : '' },
+      h('td', {}, g.no),
+      h('td', {}, g.text, g.deleted_at ? h('div', { class: 'muted' }, '[hidden]') : null),
+      h('td', {}, person(g.author_name, g.student_id)),
+      h('td', { class: 'muted' }, short(g.client_token)),
+      h('td', { class: 'muted' }, fmtTime(g.created_at)),
+      h('td', {}, h('button', { onclick: () => act(() => A.setGuestbookDeleted(g.id, !g.deleted_at), g.deleted_at ? 'Restored.' : 'Hidden.') },
+        g.deleted_at ? 'Restore' : 'Hide')))));
+}
+
+const VIEWS = { conflicts: viewConflicts, stories: viewStories, settings: viewSettings, guestbook: viewGuestbook, stats: viewStats, log: viewLog };
 
 async function render() {
   document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
@@ -253,7 +271,7 @@ $('#export').addEventListener('click', async () => {
   try {
     const data = await A.exportAll();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: `relay-novel-export-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}.json` });
+    const a = h('a', { href: URL.createObjectURL(blob), download: `relay-novel-backup-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}.json` });
     document.body.append(a); a.click(); a.remove();
   } catch (err) { notice(errorText(err)); }
 });
