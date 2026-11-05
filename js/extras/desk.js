@@ -127,11 +127,12 @@ export function aboutView(app) {
       h('p', { class: 'faint about-credits' },
         '글꼴: Neo둥근모, 갈무리11, 배민 주아(도장 글씨) — SIL OFL', h('br'),
         '만든 사람들: 연세문학회 · 함께 쓴 사람 모두', h('br'),
-        '© 2026 연세문학회. 이야기의 권리는 쓴 사람들에게.'));
+        '© 2026 연세문학회. 이야기의 권리는 쓴 사람들에게.'),
+      h('p', { class: 'about-made' }, 'made by 장준규'));
   }
   return {
     type: 'about', route: '/about', title: '이 컴퓨터에 관하여', body, remember: false, resizable: false,
-    size: { w: 380, h: 430 }, position: 'center', minimizable: false,
+    size: { w: 380, h: 456 }, position: 'center', minimizable: false,
     mount: render,
   };
 }

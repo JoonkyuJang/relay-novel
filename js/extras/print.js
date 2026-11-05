@@ -65,7 +65,7 @@ export function printSheets(story) {
   document.body.append(wrap);
   document.body.classList.add('printing');
   const title = document.title;
-  document.title = `${story.title || '제목 없는 이야기'} — 연문회 릴레이 소설`;   // the PDF's file name
+  document.title = `${story.title || '제목 없는 이야기'} — 연세문학회 릴레이 소설`;   // the PDF's file name
   const cleanup = () => {
     document.body.classList.remove('printing');
     wrap.remove();

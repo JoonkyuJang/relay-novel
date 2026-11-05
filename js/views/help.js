@@ -22,7 +22,7 @@ export function helpView(app) {
     const s = app.settings ?? {};
     const min = Math.round((s.baton_seconds ?? 300) / 60);
     scroll.replaceChildren(
-      h('h3', { style: 'margin:0 0 10px;font-size:13px' }, '연문회 릴레이 소설은 이렇게 써요'),
+      h('h3', { style: 'margin:0 0 10px;font-size:13px' }, '연세문학회 릴레이 소설은 이렇게 써요'),
       h('ol', { style: 'margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;line-height:18px' },
         h('li', {}, `이야기 서랍에서 이야기를 열고 '이어 쓰기'를 누르면 ${min}분 동안 그 자리가 내 자리로 맡아져요. 그동안 다른 사람은 기다려요.`),
         h('li', {}, 'Enter를 누르면 줄이 바로 올라가요.'),
