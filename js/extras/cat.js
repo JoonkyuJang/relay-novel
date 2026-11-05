@@ -1,5 +1,6 @@
 // 문냥이: the desktop cat. Pixel sprites drawn to tiny canvases, simple wandering,
-// title-bar naps, petting (shared counter), rare wink, belly-up, reach, hiss, jump.
+// title-bar naps, petting (shared counter), rare wink, belly-up, reach, hiss, jump,
+// watching you type (ears twitch at the carriage return), naps on the newest 완결 seal.
 import * as api from '../api.js';
 import { h } from '../ui.js';
 import { isPhone } from '../wm.js';
@@ -31,6 +32,16 @@ export function catImg(name, { scale = 2, pal = 'day', cls = '' } = {}) {
   return h('img', { class: `cat-img ${cls}`, src: catFrame(name, pal), width: rows[0].length * scale, height: rows.length * scale, alt: '', draggable: false });
 }
 
+// ear twitch frames, derived from the generated ones (the right ear flicks flat)
+function twitch(rows) {
+  const r = rows.slice();
+  const put = (y, x, str) => { r[y] = r[y].slice(0, x) + str + r[y].slice(x + str.length); };
+  put(2, 17, '.'); put(3, 16, '.ooo'); put(4, 16, 'wpp');
+  return r;
+}
+SPRITES.sitEar = twitch(SPRITES.sit);
+SPRITES.lookEar = twitch(SPRITES.look);
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const SCALE = 2;
 const W = 26 * SCALE, H = 22 * SCALE;
@@ -45,9 +56,9 @@ export function initCat(app, wm, desktop) {
 
   let x = 0, y = 0;                 // centre x, bottom y (px inside the desktop)
   let flip = false;                 // true = facing left (sprites face right)
-  let state = 'sit';                // sit | walk | nap | belly | pet | busy | look | reach | away
+  let state = 'sit';                // sit | walk | nap | belly | pet | busy | look | reach | watch | away
   let frameName = 'sit';
-  let napWin = null, napAt = null;
+  let napWin = null, napAt = null, napSeal = null;
   let timers = [];
   let anim = null;
   const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; };
@@ -103,9 +114,10 @@ export function initCat(app, wm, desktop) {
     if (state !== 'sit' || document.hidden || isPhone()) { later(decide, 8000); return; }
     const r = Math.random();
     const wins = wm.wins().filter(w => !w.minimized && w.el.offsetWidth > 200 && w.view.type !== 'login');
-    if (on('cat_wander') && r < 0.45) walkTo(rand(60, desktop.clientWidth - 160));
-    else if (on('cat_wander') && r < 0.7 && wins.length) napOn(wins[Math.floor(Math.random() * wins.length)]);
-    else if (on('cat_belly') && r < 0.8) belly();
+    if (on('cat_wander') && r < 0.42) walkTo(rand(60, desktop.clientWidth - 160));
+    else if (on('cat_wander') && r < 0.64 && wins.length) napOn(wins[Math.floor(Math.random() * wins.length)]);
+    else if (on('cat_seal_nap') && r < 0.76 && sealSpot()) napOnSeal();
+    else if (on('cat_belly') && r < 0.84) belly();
     else sit();
   }
 
@@ -137,15 +149,52 @@ export function initCat(app, wm, desktop) {
       later(wake, rand(60e3, 150e3));
     }) });
   }
+  // the newest 완결 seal in the 이야기 서랍, if it's in view and nothing covers it
+  function sealSpot() {
+    const win = wm.get('stories');
+    if (!win || win.minimized || isPhone()) return null;
+    const seal = win.el.querySelector('.done-card-seal');
+    const scroller = win.el.querySelector('.win-scroll');
+    if (!seal || !scroller) return null;
+    const r = seal.getBoundingClientRect(), sc = scroller.getBoundingClientRect(), d = desktop.getBoundingClientRect();
+    if (!r.width) return null;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    if (r.top < sc.top || r.bottom > sc.bottom) return null;
+    const hit = document.elementFromPoint(cx, cy);
+    if (!hit || !seal.contains(hit)) return null;
+    return { win, x: Math.round(cx - d.left), y: Math.round(r.top - d.top + r.height * 0.8) };
+  }
+  function napOnSeal() {
+    const spot = sealSpot();
+    if (!spot || spot.y < H + 6) { sit(); return; }
+    walkTo(spot.x, { then: () => {
+      const again = sealSpot();
+      if (!again) { sit(); return; }
+      hopTo(again.x, again.y, () => {
+        clearTimers();
+        state = 'nap'; napWin = again.win; napSeal = again;
+        napAt = { left: parseInt(again.win.el.style.left) || 0, top: parseInt(again.win.el.style.top) || 0 };
+        setFrame('sleep');
+        el.classList.add('napping');
+        anim = setInterval(watchNap, 500);
+        later(wake, rand(40e3, 100e3));
+      });
+    } });
+  }
   function watchNap() {
     if (state !== 'nap') return;
+    if (napSeal) {                                   // the drawer re-draws its cards: follow the spot, not the element
+      const s2 = sealSpot();
+      if (!s2 || Math.abs(s2.x - napSeal.x) > 3 || Math.abs(s2.y - napSeal.y) > 3) wake();
+      return;
+    }
     const w = napWin, gone = !w || !w.el.isConnected || w.minimized;
     if (gone || parseInt(w.el.style.left) !== napAt.left || parseInt(w.el.style.top) !== napAt.top) wake();
   }
   function wake() {
     if (state !== 'nap') return;
     el.classList.remove('napping');
-    napWin = null;
+    napWin = null; napSeal = null;
     hopTo(x + (flip ? -30 : 30), floorY(), sit);
   }
   function hopTo(tx, ty, done) {
@@ -216,11 +265,11 @@ export function initCat(app, wm, desktop) {
       el.classList.add('shake');
       play('hiss');
       say('하악!', 2400, 'hiss');
-      later(() => { el.classList.remove('shake'); napWin = null; place(x, floorY()); sit(); }, 2600);
+      later(() => { el.classList.remove('shake'); napWin = null; napSeal = null; place(x, floorY()); sit(); }, 2600);
     },
     run() {                                        // 방명록 "야옹": dash to the other side
       if (state === 'away' || isPhone()) return;
-      el.classList.remove('napping'); napWin = null;
+      el.classList.remove('napping'); napWin = null; napSeal = null;
       say('!', 1200);
       place(x, floorY());
       const tx = x < desktop.clientWidth / 2 ? desktop.clientWidth - 140 : 80;
@@ -268,6 +317,48 @@ export function initCat(app, wm, desktop) {
     }
   }, { passive: true });
 
+  // ---------------------------------------------------------- watching you write
+
+  let typedAt = 0, keyTimes = [], lastBat = 0;
+  function watchTyping(field) {
+    const d = desktop.getBoundingClientRect(), r = field.getBoundingClientRect();
+    const tx = Math.min(desktop.clientWidth - 60, Math.max(40, r.left - d.left + r.width * rand(0.25, 0.75)));
+    const settle = () => {
+      clearTimers();
+      state = 'watch';
+      flip = (r.left + r.width / 2 - d.left) < x;
+      setFrame('look');
+      img.style.transform = flip ? 'scaleX(-1)' : '';
+      anim = setInterval(() => { if (state === 'watch' && Date.now() - typedAt > 8000) sit(); }, 700);
+    };
+    if (Math.abs(tx - x) < 40) settle(); else walkTo(tx, { speed: 70, then: settle });
+  }
+  function bat() {
+    if (state !== 'watch' || Date.now() - lastBat < 2500 || !on('cat_reach')) return;
+    lastBat = Date.now();
+    setFrame('reach');
+    el.classList.add('reaching');
+    later(() => { el.classList.remove('reaching'); if (state === 'watch') { setFrame('look'); img.style.transform = flip ? 'scaleX(-1)' : ''; } }, 650);
+  }
+  document.addEventListener('input', (e) => {
+    if (!on('cat') || !on('cat_typing') || isPhone() || el.hidden || document.hidden) return;
+    const t = e.target;
+    if (!t?.matches?.('textarea, input:not([type]), input[type="text"]') || !t.closest('.win')) return;
+    const now = Date.now();
+    typedAt = now;
+    keyTimes = keyTimes.filter(k => now - k < 1500); keyTimes.push(now);
+    if (state === 'watch') { if (keyTimes.length >= 10) bat(); return; }
+    if (state === 'sit' || state === 'look') watchTyping(t);
+  }, true);
+  // the carriage return: ears twitch
+  bus.on('carriage', () => {
+    if (el.hidden || !['sit', 'look', 'watch'].includes(state)) return;
+    const base = state === 'sit' ? 'sit' : 'look', ear = base === 'sit' ? 'sitEar' : 'lookEar';
+    [[0, ear], [140, base], [260, ear], [400, base]].forEach(([ms, f]) => setTimeout(() => {
+      if (['sit', 'look', 'watch'].includes(state)) { setFrame(f); img.style.transform = flip ? 'scaleX(-1)' : ''; }
+    }, ms + 250));
+  });
+
   el.addEventListener('click', (e) => { e.stopPropagation(); pet(); });
   el.addEventListener('yawn', () => { if (!el.hidden) { say('하암~', 1800); play('yawn'); } });
 
@@ -275,7 +366,7 @@ export function initCat(app, wm, desktop) {
   function reset() {
     clearTimers();
     el.classList.remove('napping', 'hop', 'wiggle', 'reaching', 'shake', 'jumping', 'squish');
-    napWin = null;
+    napWin = null; napSeal = null;
   }
   // place on the floor (desktop) or on the dock (phone)
   function home() {

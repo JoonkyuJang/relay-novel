@@ -19,6 +19,7 @@ import { initCat } from './extras/cat.js';
 import { initSaver } from './extras/saver.js';
 import { initFun } from './extras/fun.js';
 import { injectStampDefs } from './extras/stamps.js';
+import { initTicker } from './extras/life.js';
 
 initReports();                                   // crash reports first, so startup errors are caught too
 
@@ -298,6 +299,7 @@ initDesk(app, wm, { desktop, iconsNav });
 const cat = initCat(app, wm, desktop);
 initSaver(app, wm, cat);
 initFun(app, wm, { cat, clockEl });
+initTicker();
 bus.on('theme', () => renderMenubar());
 loadSettings();
 api.watch(['settings'], loadSettings);

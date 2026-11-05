@@ -6,6 +6,8 @@
 //   'activity'        {}                         user input (keys, pointer, touch)
 //   'settings'        {}                         extras changed
 //   'theme'           {}                         amber / day-night changed
+//   'my-line'         { storyId }                this tab just posted a line (the ticker skips it)
+//   'carriage'        {}                         a carriage return sounded (the cat's ears twitch)
 
 export const DEFAULTS = {
   crt_default: true, boot_screen: true, presence: true,
@@ -26,6 +28,9 @@ export const DEFAULTS = {
   fun: true, fun_full: true, fun_amber: true, fun_meow: true, fun_trash: true,
   fun_clock: true, fun_tidy: true, fun_seosi: true, fun_eagle: true, fun_catreads: true,
   title_required: true,
+  zoom_rects: true, shake_on_error: true, press_buttons: true, pixel_cursor: true,
+  type_in_lines: true, milestones: true, ticker: true, cat_typing: true, cat_seal_nap: true,
+  skyline: true, seasons: true, snow_from: '2026-12-01T00:00:00+09:00',
 };
 
 let current = { ...DEFAULTS };
@@ -67,3 +72,6 @@ export function yeyo(word) {
 // The admin can let the deadline close writing (the server enforces it too).
 export const deadlinePassed = (now = Date.now()) =>
   !!current.deadline_closes && !Number.isNaN(Date.parse(current.deadline)) && now >= Date.parse(current.deadline);
+
+// 첫눈: after the admin's date (KST), the leaves give way to snow.
+export const winter = (now = Date.now()) => !Number.isNaN(Date.parse(current.snow_from)) && now >= Date.parse(current.snow_from);

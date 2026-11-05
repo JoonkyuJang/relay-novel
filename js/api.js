@@ -28,10 +28,24 @@ function toApiError(error) {
   return new ApiError('unknown', { message: error.message, code: error.code }, error);
 }
 
+// Requests the person is waiting on (made within a second of a click or key) mark the page busy,
+// so the pixel cursor can show its hourglass; background refreshes never do.
+let lastGesture = 0, waiting = 0, busyT = null;
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { lastGesture = Date.now(); }, { capture: true, passive: true });
+function busy(d) {
+  waiting += d;
+  clearTimeout(busyT);
+  if (waiting > 0) busyT = setTimeout(() => document.documentElement.classList.add('rn-busy'), 300);
+  else document.documentElement.classList.remove('rn-busy');
+}
+
 async function call(fn, args = {}) {
+  const felt = Date.now() - lastGesture < 1000;
+  if (felt) busy(1);
   let res;
   try { res = await sb.rpc(fn, args); }
   catch (e) { throw new ApiError('network', null, e); }
+  finally { if (felt) busy(-1); }
   if (res.error) throw toApiError(res.error);
   return res.data;
 }
@@ -96,7 +110,18 @@ export function identityProblem({ name, studentId }) {
 // ---------------------------------------------------------------- public API
 
 export const getSettings = () => call('get_public_settings');
-export const listStories = () => call('list_stories');
+// Several windows (서랍, the ticker, the screen saver…) refetch the list on the same signal:
+// they share one request per 'list' change. onStories(fn) hears every fresh list.
+let listing = null, listGen = 0;
+const listHearers = new Set();
+export function listStories() {
+  if (listing && listing.gen === listGen && Date.now() - listing.at < 5000) return listing.p;
+  const p = call('list_stories');
+  listing = { p, gen: listGen, at: Date.now() };
+  p.then(list => listHearers.forEach(fn => { try { fn(list); } catch { /* a hearer's own problem */ } }), () => { listing = null; });
+  return p;
+}
+export function onStories(fn) { listHearers.add(fn); return () => listHearers.delete(fn); }
 export const getStory = (storyId) => call('get_story', { p_story_id: storyId });
 export const publicStats = () => call('public_stats');
 
@@ -196,6 +221,7 @@ export function typingChannel(storyId, onCount) {
 
 // Refresh this tab's own windows right after its own writes (no need to wait for Realtime).
 export function poke(keys) {
+  if (keys.includes('list')) listGen++;
   for (const s of subscribers) if (s.keys.some(k => keys.includes(k))) notify(s);
 }
 
@@ -213,6 +239,7 @@ function notify(sub, jitter = 0) {
   sub.t = setTimeout(() => sub.fn(), 250 + Math.random() * jitter);
 }
 function notifyKey(key) {
+  if (key === 'list') listGen++;
   // 'list' is watched by many windows on every client: spread those refetches out a little
   for (const s of subscribers) if (s.keys.includes(key)) notify(s, key === 'list' ? 1500 : 0);
 }

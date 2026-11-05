@@ -3,6 +3,7 @@
 import { h } from '../ui.js';
 import { prefs } from '../api.js';
 import { on, kst, bus } from './extras.js';
+import { initSkyline } from './skyline.js';
 
 export const PHASES = ['morning', 'day', 'dusk', 'night'];
 const NAMES = { morning: '아침', day: '낮', dusk: '저녁 노을', night: '밤' };
@@ -98,9 +99,11 @@ export function initDayNight(desktop) {
   orb = h('div', { class: 'sky-orb' });
   sky.append(orb);
   desktop.before(sky);
-  applySky();
+  applySky();                                   // (before the skyline reads styles: the first sky must not fade in)
+  const skyline = initSkyline(sky, currentPhase);
   setInterval(applySky, 60e3);
   bus.on('settings', applySky);
+  return { skyline };
 }
 
 // Little sun / moon before the clock; clicking cycles 자동 → 늘 낮 → 늘 밤 (this device).

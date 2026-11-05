@@ -6,6 +6,8 @@ import { prefs } from './api.js';
 
 // interface sounds (sound.js listens; wm.js stays free of the audio code)
 const sound = (name) => dispatchEvent(new CustomEvent('rn-sound', { detail: name }));
+// …and window moments for the zoom outlines (life.js): { kind, el?, from?, to? } — elements or rects
+const moment = (kind, detail) => dispatchEvent(new CustomEvent('rn-win', { detail: { kind, ...detail } }));
 
 const phoneQuery = window.matchMedia('(max-width: 767px)');
 export const isPhone = () => phoneQuery.matches;
@@ -168,7 +170,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     el.addEventListener('focusin', () => { if (active !== key && wins.has(key)) focus(key, { keep: true }); });   // keyboard users raise windows too
     view.mount?.();
     focus(key, { silent });
-    if (!silent) sound('open');
+    if (!silent) { sound('open'); moment('open', { to: el }); }
     // move keyboard focus into the new window (views that focus a field do so a tick later)
     if (!silent && (document.activeElement === document.body || document.activeElement?.closest?.('.win'))) el.focus({ preventScroll: true });
     return win;
@@ -179,6 +181,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     const win = wins.get(key);
     if (!win || win.minimized || !tray || isPhone()) return;
     closeProps();
+    const from = win.el.getBoundingClientRect();
     win.minimized = true;
     win.el.hidden = true;
     sound('minimize');
@@ -186,6 +189,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
       h('span', { class: 'tray-ico', 'aria-hidden': 'true' }), h('span', {}, win.titleEl.textContent));
     tray.append(win.trayBtn);
     tray.hidden = false;
+    moment('minimize', { from, to: win.trayBtn });
     if (active === key) {
       win.el.classList.remove('is-active');
       active = null;
@@ -199,9 +203,11 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     win.minimized = false;
     win.el.hidden = false;
     sound('restore');
+    const from = win.trayBtn?.getBoundingClientRect();
     win.trayBtn?.remove(); win.trayBtn = null;
     if (tray && !tray.children.length) tray.hidden = true;
     clamp(win.el);
+    if (from?.width) moment('restore', { from, to: win.el });
   }
   // 창 정리하기: cascade every visible window from the top-left.
   function tidy() {
@@ -221,6 +227,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     if (tray && !tray.children.length) tray.hidden = true;
     const hadFocus = win.el.contains(document.activeElement);
     sound('close');
+    if (!win.minimized) moment('close', { from: win.el.getBoundingClientRect() });
     win.view.unmount?.();
     win.el.remove();
     wins.delete(key);

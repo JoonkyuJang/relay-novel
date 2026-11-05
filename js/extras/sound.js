@@ -74,7 +74,7 @@ export function voice(text, seed, { pitch = 1 } = {}) {
 
 // Interface sounds from modules that shouldn't import this one (wm.js, ui.js):
 //   dispatchEvent(new CustomEvent('rn-sound', { detail: 'open' }))
-const UI = new Set(['open', 'close', 'minimize', 'restore', 'menu', 'select', 'alert']);
+const UI = new Set(['open', 'close', 'minimize', 'restore', 'menu', 'select', 'alert', 'error']);
 addEventListener('rn-sound', (e) => { if (UI.has(e.detail)) play(e.detail); });
 
 // The typewriter key for every text field on the site (stories, 방명록, 메모장, 새 이야기, …).

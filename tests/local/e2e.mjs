@@ -986,6 +986,77 @@ await step('sounds: typing in every text field, window open / minimize / restore
   assert.ok(s.filter(x => x === 'close').length <= 1, `one close sound at log-out: ${s}`);
 });
 
+await step('little touches: 학생회관, zoom outlines, "no" shake, type-in lines, ticker, milestones, cat watching', async () => {
+  const q = (sql, a) => pool.query(sql, a).then(r => r.rows[0].r);
+  let k = 0;
+  const add = async (id, t) => {
+    const sid = `20265${String(k++).padStart(5, '0')}`;
+    const b = await q(`select public.claim_baton($1, $2, $3, 'seed') as r`, [id, `손님${k}`, sid]);
+    return q(`select public.submit_line($1, $2, $3, $4, $5, 'seed', $6) as r`, [id, b.parent_id, t, `손님${k}`, sid, b.token]);
+  };
+  const make = async (title, lines, max) => {
+    const id = (await q(`select public.create_story($1, $2, '첫줄', $3, 'seed') as r`, [title, lines[0], `20264${String(k++).padStart(5, '0')}`])).story_id;
+    await pool.query('update app.stories set max_lines = $2 where id = $1', [id, max]);
+    for (const t of lines.slice(1)) await add(id, t);
+    return id;
+  };
+  const half = await make('반환점 이야기', ['하나.', '둘.', '셋.'], 8);
+  const last = await make('마지막 한 줄 이야기', ['처음이자', '거의 끝'], 3);
+  const p = await newUser('생기', '2026100814');
+  await p.addInitScript(() => { localStorage.setItem('rn.sound', '1'); localStorage.setItem('rn.debugSounds', '1'); localStorage.setItem('rn.daynight', 'night'); });
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').waitFor();
+  // the building behind the icons, lit windows at night (the club room always), autumn trees
+  assert.equal(await p.locator('.desk-skyline canvas.sk').count(), 1);
+  assert.ok(Number(await p.locator('.desk-skyline').getAttribute('data-lit')) >= 1, 'the club room is lit at night');
+  const cls = await p.evaluate(() => document.body.className);
+  for (const c of ['fx-press', 'fx-cursor', 'season-autumn', 'phase-night']) assert.ok(cls.includes(c), `${c} in ${cls}`);
+  // a window zooms out of its icon
+  await p.click('.icon[data-route="/guestbook"]');
+  await p.locator('.zoom-rect').first().waitFor({ state: 'attached', timeout: 1000 });
+  await win(p, 'guestbook').locator('.win-close').click();
+  // the last empty line glows
+  await p.goto(`${BASE}/#/story/${last}`);
+  await win(p, `story:${last}`).locator('.line.last-slot >> text=마지막 한 줄이 남았어요').waitFor();
+  // someone holds it: pressing 이어 쓰기 shakes the window "no" with the error sound
+  await q(`select public.claim_baton($1, '다른 사람', '2026100899', 'seed') as r`, [last]);
+  await p.evaluate(() => { window.__rnSounds = []; });
+  await win(p, `story:${last}`).locator('button:text-is("이어 쓰기")').click();
+  await p.waitForFunction((key) => document.querySelector(`.win[data-key="${key}"]`)?.classList.contains('no'), `story:${last}`, { timeout: 3000 });
+  assert.ok((await p.evaluate(() => window.__rnSounds)).includes('error'));
+  // another person's line arrives: it types itself in, the window says 절반 왔어요!, the menu bar ticker passes it on
+  await p.goto(`${BASE}/#/story/${half}`);
+  const w = win(p, `story:${half}`);
+  await w.locator('.line').nth(2).waitFor();
+  await p.evaluate(() => { window.__rnSounds = []; });
+  await p.waitForTimeout(1500);                       // the window has learned its starting version
+  await add(half, '넷, 여기서 반을 돌아요.');
+  await w.locator('.line.typing-in').waitFor({ timeout: 30000 });
+  await w.locator('.milestone >> text=절반 왔어요!').waitFor({ timeout: 3000 });
+  await p.waitForTimeout(700);
+  await p.screenshot({ path: `${SHOTS}/30-little-touches.png` });
+  await w.locator('.line:not(.typing-in) >> text=넷, 여기서 반을 돌아요.').waitFor({ timeout: 5000 });
+  assert.ok((await p.evaluate(() => window.__rnSounds)).includes('ret'), 'a carriage return at the end');
+  await p.locator('.ticker:not([hidden]) >> text=반환점 이야기').waitFor({ timeout: 5000 });
+  // the cat comes to watch when I type
+  await w.locator('button:text-is("이어 쓰기")').click();
+  const ta = w.locator('textarea');
+  await ta.waitFor();
+  const before = await p.locator('.cat').evaluate(e => e.offsetLeft);
+  await ta.pressSequentially('고양이가 보고 있다', { delay: 60 });
+  await p.waitForTimeout(3500);
+  const box = await w.boundingBox();
+  const catX = await p.locator('.cat').evaluate(e => e.offsetLeft + e.offsetWidth / 2);
+  assert.ok(catX > box.x - 40 && catX < box.x + box.width + 40, `the cat came under the window (${before} → ${catX}, window ${box.x}..${box.x + box.width})`);
+  await w.locator('button:text-is("취소")').click();
+  // 첫눈: after the admin's date the trees go bare, roofs get snow, flakes instead of leaves
+  await pool.query(`update app.settings set extras = extras || '{"snow_from": "2020-01-01T00:00:00+09:00"}'::jsonb`);
+  await p.reload();
+  await win(p, 'stories').waitFor();
+  await p.waitForFunction(() => document.body.classList.contains('season-winter'));
+  await pool.query(`update app.settings set extras = extras - 'snow_from'`);
+});
+
 // Last on purpose: it wipes the database.
 await step('관리 · 초기화: one counter, then everything (with a backup download first)', async () => {
   await finishedStory('지워질 이야기');

@@ -287,6 +287,18 @@ export function makeSynth(ac, { volume = 0.55 } = {}) {
       chip(t, { base: B, pitch: [9, 9, 9, 9, 9], vol: [0.9, 1, 1, 0.8, 0.5], duty: 0.5, peak: 0.1, echo: 0.1 });
       chip(t + 7 * FR, { base: B, pitch: [4, 4, 4, 4, 4, 4], vol: [0.9, 1, 0.9, 0.7, 0.5, 0.25], duty: 0.5, peak: 0.1, echo: 0.1 });
     },
+    // something can't be done: a low "bu-bup" (the window shakes its head with it)
+    error(t) {
+      chip(t, { base: B, pitch: [-17, -17, -17, -17], vol: [1, 1, 0.9, 0.4], duty: [0.5, 0.25, 0.5, 0.25], peak: 0.1 });
+      chip(t + 6 * FR, { base: B, pitch: [-18, -18, -18, -18, -18, -18], vol: [1, 1, 0.9, 0.7, 0.4, 0.15], duty: [0.5, 0.25, 0.5, 0.25, 0.5, 0.25], peak: 0.1 });
+    },
+    // someone else's line finishes typing in: a small carriage return (ratchet + soft stop)
+    ret(t) {
+      let tt = t;
+      for (let i = 0; i < 5; i++) { noise(tt, { rate: 30000, vol: [1, 0.3], short: true, peak: 0.06, frame: FR / 3 }); tt += (2.2 - i * 0.2) * FR; }
+      noise(tt + 0.01, { rate: [5000, 2500], vol: [0.8, 0.3], peak: 0.1 });
+      chip(tt + 0.01, { base: 110, pitch: [0, -7], vol: [0.7, 0.3], wave: 'tri', peak: 0.16 });
+    },
   };
 
   // ---------------------------------------------------------- 낭독회 voice

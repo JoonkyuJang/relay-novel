@@ -87,7 +87,7 @@ export function stampButtons(app, line, state, { onChange } = {}) {
       }
       msg.textContent = '';
       onChange?.();
-    } catch (e) { msg.textContent = errorText(e); }
+    } catch (e) { msg.textContent = errorText(e); dispatchEvent(new CustomEvent('rn-refuse', { detail: row })); }
     finally { busy = false; }
   }
   draw();

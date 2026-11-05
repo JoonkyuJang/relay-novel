@@ -1,7 +1,7 @@
 // 새 이야기: title (required unless the admin turns it off) + first line.
 import * as api from '../api.js';
 import { h, errorText } from '../ui.js';
-import { X, deadlinePassed } from '../extras/extras.js';
+import { X, bus, deadlinePassed } from '../extras/extras.js';
 
 export function newStoryView(app) {
   const st = () => app.settings ?? { max_chars: 100, max_title_chars: 40 };
@@ -57,6 +57,7 @@ export function newStoryView(app) {
     go.disabled = true; msg.replaceChildren();
     try {
       const r = await api.createStory({ title: title.value, text: text.value, ...ident });
+      bus.emit('my-line', { storyId: r.story_id });
       api.setDraft('new', ''); api.setDraft('new-title', '');
       title.value = ''; text.value = '';
       app.close('new');

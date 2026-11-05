@@ -1,6 +1,7 @@
 // One story: its lines, the writer reveal, and the baton/composer state machine.
 // 부가 기능 here: stamp pads + buttons, 꽉 채웠어요 mark, live "누군가 쓰는 중 (n자)",
-// 자리 나면 알려 주기, 원고지 writing box, finished-story header / 이야기 기록, completion effects.
+// 자리 나면 알려 주기, 원고지 writing box, finished-story header / 이야기 기록, completion effects,
+// others' new lines typing themselves in, 절반 · 마지막 한 줄 milestones.
 import * as api from '../api.js';
 import { h, icon, fmtTime, fmtCountdown, errorText, attachReveal } from '../ui.js';
 import { on, fun, bus, X, manuscript, reduceMotion, deadlinePassed } from '../extras/extras.js';
@@ -25,6 +26,7 @@ export function storyView(app, storyId) {
   let mode = 'idle';           // idle | writing | conflict | done
   let lastResult = null;
   let message = '';
+  let messageNew = false;      // a refusal just now (shakes the window once; re-renders of it don't)
   let clockOffset = 0;
   let known = null;            // line ids already shown (to mark new ones)
   let revealedId = null;       // line whose 속성 window is open
@@ -144,6 +146,11 @@ export function storyView(app, storyId) {
       items.push(h('li', { class: 'line pending' },
         h('span', { class: 'line-no' }, pad2(story.line_count + 1)),
         h('span', { class: 'line-text' }, h('span', { 'aria-hidden': 'true' }, '▒▒▒▒▒▒ '), h('span', { 'data-typing': '' }, pendingText()), h('span', { class: 'dots', 'aria-hidden': 'true' }, '…')), h('span')));
+    } else if (on('milestones') && story.status === 'open' && story.max_lines - story.line_count === 1 && mode !== 'writing') {
+      // the empty last line glows softly until someone takes it
+      items.push(h('li', { class: 'line last-slot' },
+        h('span', { class: 'line-no' }, pad2(story.max_lines)),
+        h('span', { class: 'line-text' }, '마지막 한 줄이 남았어요'), h('span')));
     }
     if (!first) {
       const added = story.lines.filter(l => !known.has(l.id));
@@ -154,9 +161,54 @@ export function storyView(app, storyId) {
     }
     known = ids;
     list.replaceChildren(...items);
+    if (!first) typeIn(story.lines.filter((l, i) => items[i]?.classList.contains('is-new')), items);
     renderHead();
     if (first || nearBottom) scroll.scrollTop = story.status === 'completed' && first ? 0 : scroll.scrollHeight;
     placeTicks();
+  }
+
+  // others' new lines type themselves in, letter by letter, and end with a carriage return
+  function typeIn(fresh, items) {
+    if (!on('type_in_lines') || reduceMotion()) return;
+    const me = app.identity();
+    for (const l of fresh) {
+      if (l.removed || (me && l.author_name === me.name && lastResult?.text === l.text)) continue;
+      const li = items[story.lines.indexOf(l)];
+      const node = li?.querySelector('.line-text')?.firstChild;
+      if (!node || node.nodeType !== 3) continue;
+      const chars = [...l.text];
+      const step = Math.min(70, Math.max(28, 2200 / chars.length));
+      let i = 0;
+      node.data = '';
+      li.classList.add('typing-in');
+      const t = setInterval(() => {
+        if (closed || !li.isConnected) { clearInterval(t); return; }
+        i++;
+        node.data = chars.slice(0, i).join('');
+        if (i % 2 === 0 && chars[i - 1] !== ' ') play('key', { ch: chars[i - 1] });
+        if (i >= chars.length) {
+          clearInterval(t);
+          li.classList.remove('typing-in');
+          play('ret');
+          bus.emit('carriage', {});
+        }
+      }, step);
+    }
+  }
+
+  // 절반 왔어요!: a small note in the window when a story crosses its middle while it's open here
+  function milestone(prevCount) {
+    if (!on('milestones') || prevCount == null || story.status !== 'open') return;
+    const half = Math.ceil(story.max_lines / 2);
+    if (!(prevCount < half && story.line_count >= half)) return;
+    const win = foot.closest('.win');
+    if (!win) return;
+    win.querySelector('.milestone')?.remove();
+    const note = h('div', { class: 'milestone', role: 'status' },
+      h('b', {}, '절반 왔어요!'), h('span', {}, ` ${story.line_count} / ${story.max_lines}줄 · 이제 반환점을 돌아요`));
+    win.append(note);
+    play('pop');
+    setTimeout(() => note.remove(), 4200);
   }
 
   function renderHead() {
@@ -248,7 +300,7 @@ export function storyView(app, storyId) {
       : null;
     return [
       status,
-      message ? h('div', { class: 'notice bad', role: 'alert' }, message)
+      message ? noticeBad()
         : reason ? h('div', { class: 'notice warn' }, errorText(reason)) : null,
       h('div', { class: 'actions', style: 'align-items:center' },
         ident
@@ -316,10 +368,17 @@ export function storyView(app, storyId) {
         counter)),
       gridMode ? gridBox(ta, baton.max_chars) : ta,
       h('span', { class: 'faint compose-hint', id: `hint-${storyId}` }, 'Enter를 누르면 바로 올라가요. 올린 뒤에는 고칠 수 없어요.'),
-      message ? h('div', { class: 'notice bad', role: 'alert' }, message) : null,
+      message ? noticeBad() : null,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: cancel }, '취소'), submitBtn),
     ];
   }
+
+  function noticeBad() {
+    const n = h('div', { class: `notice bad${messageNew ? '' : ' seen'}`, role: 'alert' }, message);
+    messageNew = false;
+    return n;
+  }
+  const refused = (text) => { message = text; messageNew = true; };
 
   function renderFoot() {
     if (story.status === 'completed' && mode !== 'conflict') mode = 'done';
@@ -414,7 +473,7 @@ export function storyView(app, storyId) {
           : null]);
       if (closed) return;
       const blockerSig = JSON.stringify(blocker);
-      const prevMode = mode, prevWriting = story?.writing, prevStatus = story?.status;
+      const prevMode = mode, prevWriting = story?.writing, prevStatus = story?.status, prevCount = story?.line_count;
       story = s;
       clockOffset = Date.parse(s.server_now) - Date.now();
       view.setTitle?.(s.title || '제목 없는 이야기');
@@ -423,9 +482,10 @@ export function storyView(app, storyId) {
       renderLines();
       const blockerChanged = blockerSig !== lastBlockerSig;
       lastBlockerSig = blockerSig;
-      if (mode !== 'writing' && (prevMode !== mode || prevWriting !== s.writing || prevStatus !== s.status || blockerChanged || !foot.hasChildNodes())) renderFoot();
+      if (mode !== 'writing' && (prevMode !== mode || prevWriting !== s.writing || prevStatus !== s.status || prevCount !== s.line_count || blockerChanged || !foot.hasChildNodes())) renderFoot();
       else tick();
       if (prevStatus === 'open' && s.status === 'completed') celebrate();
+      else milestone(prevCount);
     } catch (e) {
       if (e.code === 'story_not_found') {
         view.setTitle?.('찾을 수 없음');
@@ -455,7 +515,7 @@ export function storyView(app, storyId) {
       renderBar(); renderFoot();
       refresh();
     } catch (e) {
-      message = errorText(e);
+      refused(errorText(e));
       if (e.code === 'story_closed') mode = 'done';
       renderFoot();
       if (e.code === 'baton_held' || e.code === 'story_closed') refresh();
@@ -468,8 +528,8 @@ export function storyView(app, storyId) {
     const ta = foot.querySelector('textarea');
     const text = ta.value;
     const n = api.countChars(text);
-    if (!n) { message = errorText({ code: 'empty_text' }); renderFoot(); return; }
-    if (n > baton.max_chars) { message = errorText({ code: 'too_long', detail: { max: baton.max_chars } }); renderFoot(); return; }
+    if (!n) { refused(errorText({ code: 'empty_text' })); renderFoot(); return; }
+    if (n > baton.max_chars) { refused(errorText({ code: 'too_long', detail: { max: baton.max_chars } })); renderFoot(); return; }
     submitting = true;
     foot.querySelectorAll('button').forEach(b => { b.disabled = true; });
     try {
@@ -481,6 +541,8 @@ export function storyView(app, storyId) {
       if (r.result === 'accepted') {
         api.setDraft(storyId, '');
         play('bell');
+        bus.emit('carriage', {});
+        bus.emit('my-line', { storyId });
         mode = r.story_status === 'completed' ? 'done' : 'idle';
       } else {
         mode = 'conflict';
@@ -488,7 +550,7 @@ export function storyView(app, storyId) {
       await refresh();
       renderFoot();
     } catch (e) {
-      message = errorText(e);
+      refused(errorText(e));
       if (e.code === 'story_closed') { baton = null; mode = 'done'; await refresh(); }
       renderFoot();
     } finally {
