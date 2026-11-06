@@ -47,10 +47,13 @@ export function loginView(app, { reason = '' } = {}) {
     msg,
     h('div', { class: 'label' }, h('label', { for: 'lg-name' }, '이름'), name),
     h('div', { class: 'label' }, h('label', { for: 'lg-sid' }, '학번'), sid),
-    h('div', { class: 'row' }, h('span', { id: 'lg-crt' }, '화면 효과 (CRT)'),
-      h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-crt' }, crtOn, crtOff)),
-    on('sound') ? h('div', { class: 'row sound-row' }, h('span', { id: 'lg-snd' }, '소리', h('br'), sndHint),
-      h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-snd' }, sndOn, sndOff)) : null,
+    // screen effect and sound side by side (one row, so the login still fits a small phone)
+    h('div', { class: 'toggles' },
+      h('div', { class: 'toggle' }, h('span', { id: 'lg-crt' }, '화면 효과'),
+        h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-crt' }, crtOn, crtOff)),
+      on('sound') ? h('div', { class: 'toggle sound-row' }, h('span', { id: 'lg-snd' }, '소리'),
+        h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-snd' }, sndOn, sndOff)) : null),
+    on('sound') ? sndHint : null,
     h('p', { class: 'muted', style: 'margin:0;line-height:18px' },
       (app.settings?.show_student_id ?? true)
         ? '이름과 학번은 쓴 줄과 함께 저장되고, 줄의 속성 창에서 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'
@@ -93,7 +96,7 @@ export function loginView(app, { reason = '' } = {}) {
   body.append(scroll);
   return {
     type: 'login', route: '/login', title: '연문회 OS — 로그인', body,
-    size: { w: 460, h: 556 }, position: 'center', remember: false, closable: false, resizable: false,
+    size: { w: 460, h: 530 }, position: 'center', remember: false, closable: false, resizable: false,
     className: 'login-win',
     mount() { setTimeout(() => (name.value ? sid : name).focus({ preventScroll: true }), 50); },
   };

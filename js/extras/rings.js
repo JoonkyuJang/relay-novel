@@ -10,6 +10,8 @@ import { hoverTip } from './bin.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const MAX_DRAWN = 260;
+let count = 0;
+export const ringCount = () => count;
 
 function hash(str) { let x = 2166136261; for (const c of str) { x ^= c.charCodeAt(0); x = Math.imul(x, 16777619); } return x >>> 0; }
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
@@ -62,15 +64,18 @@ export function initRings(desktop) {
         h('b', {}, '늦은 밤의 커피 자국'),
         h('span', {}, '밤 12시부터 새벽 6시 사이에 누군가 줄을 쓸 때마다 하나씩 남아요. 오래된 자국일수록 조금씩 옅어져요.'),
         h('span', { class: 'faint' }, `이 자국: ${when(row.at)} · 지금까지 ${rows.length.toLocaleString('ko-KR')}개`),
-      ]);
+      ], { delay: 700 });                             // (a mouse just passing over the desk shouldn't pop boxes)
       return el;
     }));
   }
-  let busy = false;
+  // (every new line anywhere bumps 'list': ask at most once a minute, with one catch-up call after)
+  let busy = false, lastAsk = 0, again = null;
   async function refresh() {
-    if (!on('coffee_rings') || busy) { draw(); return; }
-    busy = true;
-    try { rows = await api.nightRings(); } catch { /* keep what we have */ } finally { busy = false; }
+    if (!on('coffee_rings')) { draw(); return; }
+    const wait = 60e3 - (Date.now() - lastAsk);
+    if (busy || wait > 0) { draw(); if (!again) again = setTimeout(() => { again = null; refresh(); }, Math.max(wait, 1000)); return; }
+    busy = true; lastAsk = Date.now();
+    try { rows = await api.nightRings(); count = rows.length; } catch { /* keep what we have */ } finally { busy = false; }
     draw();
   }
   refresh();
@@ -78,5 +83,5 @@ export function initRings(desktop) {
   bus.on('settings', refresh);
   addEventListener('resize', () => { clearTimeout(draw.t); draw.t = setTimeout(draw, 200); });
   setInterval(draw, 3600e3);                        // fading follows the clock
-  return { refresh, count: () => rows.length };
+  return { refresh };
 }

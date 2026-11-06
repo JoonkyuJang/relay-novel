@@ -287,14 +287,14 @@ async function loadSettings() {
     forEachView(v => v.onSettings?.());
     // a link to a window that depends on the settings (#/recap after the deadline, #/mine, #/about…) may have
     // been opened before they arrived and fallen back to the 서랍: open what it really asked for
-    if (!settingsSeen && api.hasEntered()) {
+    if (!settingsSeen && booted && api.hasEntered()) {
       const route = bootRoute, [key] = resolve(route);
       if (route !== '/stories' && route !== '/login' && !wm.has(key)) openRoute(route);
     }
     settingsSeen = true;
   } catch { /* views fall back to defaults */ }
 }
-let settingsSeen = false;
+let settingsSeen = false, booted = false;      // (booted: the first windows have been opened)
 const bootRoute = currentRoute();                 // (the address may be rewritten before the settings arrive)
 
 api.presence((n) => {
@@ -345,3 +345,4 @@ if (!api.hasEntered()) {
   if (route !== '/stories' && route !== '/login') openRoute(route);
   else updateNav('/stories');
 }
+booted = true;

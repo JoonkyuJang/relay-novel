@@ -347,8 +347,12 @@ export function initCat(app, wm, desktop) {
     napWin = null; napSeal = null;
     hopTo(x + (flip ? -30 : 30), floorY(), sit);
   }
+  // on the floor the cat walks behind windows (it never covers a window's buttons);
+  // up on a title bar or a seal it sits in front
+  const up = (v) => layer.classList.toggle('up', v);
   function hopTo(tx, ty, done) {
     clearTimers();
+    up(ty < floorY() - 4);
     state = 'busy';
     setFrame('jump');
     flip = tx < x;
@@ -415,12 +419,13 @@ export function initCat(app, wm, desktop) {
       el.classList.add('shake');
       play('hiss');
       say('하악!', 2400, 'hiss');
-      later(() => { el.classList.remove('shake'); napWin = null; napSeal = null; place(x, floorY()); sit(); }, 2600);
+      later(() => { el.classList.remove('shake'); napWin = null; napSeal = null; up(false); place(x, floorY()); sit(); }, 2600);
     },
     run() {                                        // 방명록 "야옹": dash to the other side
       if (state === 'away' || isPhone()) return;
       el.classList.remove('napping'); napWin = null; napSeal = null;
       say('!', 1200);
+      up(false);
       place(x, floorY());
       const tx = x < desktop.clientWidth / 2 ? desktop.clientWidth - 140 : 80;
       walkTo(tx, { speed: 260 });
@@ -557,6 +562,7 @@ export function initCat(app, wm, desktop) {
     clearTimers();
     el.classList.remove('napping', 'hop', 'wiggle', 'reaching', 'shake', 'jumping', 'squish');
     napWin = null; napSeal = null;
+    up(false);
   }
   // place on the floor (desktop) or on the dock (phone)
   function home() {

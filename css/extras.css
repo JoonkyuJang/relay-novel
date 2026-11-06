@@ -182,7 +182,8 @@ body.phase-night .bootlog .hi { color: #F3EBDD; }
 
 /* ------------------------------------------------------------ 문냥이 */
 
-.cat-layer { position: absolute; inset: 0; pointer-events: none; z-index: 100000; }
+.cat-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }   /* behind windows on the floor… */
+.cat-layer.up { z-index: 100000; }                                                    /* …in front when up on a window */
 .cat { position: absolute; padding: 0; border: none; background: none; pointer-events: auto; cursor: pointer; transform-origin: 50% 100%; line-height: 0; }
 .cat:focus-visible { outline: 2px dashed var(--ink); }
 .cat-img { image-rendering: pixelated; display: block; }
@@ -564,9 +565,10 @@ body.phase-night .bin-heap i { border-color: #1D2A44; }
 @media (prefers-reduced-motion: reduce) { .bin-heap .stink { animation: none; } }
 
 /* login: the sound switch nudges people to turn it on */
-.login .sound-hint { font-size: 11px; color: var(--stamp); }
+.login .toggles { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.login .toggle { display: flex; align-items: center; gap: 10px; }
+.login .sound-hint { margin-top: -10px; font-size: 11px; line-height: 15px; color: #A3441D; }
 .login .sound-hint.on { color: var(--faint); }
-.login .sound-row:has(button[aria-pressed="true"]:first-child) .sound-hint { color: var(--faint); }
 
 /* 늦은 밤 커피 자국 (js/extras/rings.js) */
 .ring-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
@@ -648,10 +650,20 @@ body.amber .ring-layer { display: none; }
 .win.shaded .win-title { border-bottom: none; }
 
 /* 바탕 무늬 (right-click the desktop): 점 (default) · 원고지 · 은행잎 · 무늬 없음 */
-body.pattern-grid { background-image: linear-gradient(rgba(194,85,61,.13) 1px, transparent 1px), linear-gradient(90deg, rgba(194,85,61,.13) 1px, transparent 1px); background-size: 22px 22px; }
-body.pattern-ginkgo { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' shape-rendering='crispEdges'%3E%3Cpath d='M5 5h5v1h1v2h-1v1H9v2H8v2H7v-2H6v-1H5V9H4V6h1zM17 15h3v1h1v2h-1v1h-1v2h-1v-2h-1v-1h-1v-2h1z' fill='%23E8B931' fill-opacity='.28'/%3E%3C/svg%3E"); background-size: 48px 48px; }
-body.pattern-plain { background-image: none; }
+body.pattern-grid:not(.amber) { background-image: linear-gradient(rgba(194,85,61,.13) 1px, transparent 1px), linear-gradient(90deg, rgba(194,85,61,.13) 1px, transparent 1px); background-size: 22px 22px; }
+body.pattern-ginkgo:not(.amber) { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' shape-rendering='crispEdges'%3E%3Cpath d='M5 5h5v1h1v2h-1v1H9v2H8v2H7v-2H6v-1H5V9H4V6h1zM17 15h3v1h1v2h-1v1h-1v2h-1v-2h-1v-1h-1v-2h1z' fill='%23E8B931' fill-opacity='.28'/%3E%3C/svg%3E"); background-size: 48px 48px; }
+body.pattern-plain:not(.amber) { background-image: none; }
 body.pattern-grid .sky-layer::after { background-image: linear-gradient(rgba(29,42,68,.10) 1px, transparent 1px), linear-gradient(90deg, rgba(29,42,68,.10) 1px, transparent 1px) !important; background-size: 22px 22px !important; }
 body.pattern-grid.phase-night .sky-layer::after { background-image: linear-gradient(rgba(255,249,239,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,249,239,.07) 1px, transparent 1px) !important; }
 body.pattern-ginkgo .sky-layer::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' shape-rendering='crispEdges'%3E%3Cpath d='M5 5h5v1h1v2h-1v1H9v2H8v2H7v-2H6v-1H5V9H4V6h1zM17 15h3v1h1v2h-1v1h-1v2h-1v-2h-1v-1h-1v-2h1z' fill='%23E8B931' fill-opacity='.28'/%3E%3C/svg%3E") !important; background-size: 48px 48px !important; }
 body.pattern-plain .sky-layer::after { background-image: none !important; }
+
+/* small phones (iPhone SE…): the boot log gives its room to the login window, and the brand shrinks,
+   so the 들어가기 button is on screen without scrolling */
+@media (max-width: 767px) and (max-height: 620px) {
+  .bootlog { display: none; }
+  .win.has-bootlog { top: 12px !important; }
+  .login { gap: 12px; padding-top: 14px; }
+  .login .brand svg { width: 30px; height: 30px; }
+  .login .brand .word { font-size: 22px; line-height: 26px; }
+}

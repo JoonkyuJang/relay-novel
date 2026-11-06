@@ -105,6 +105,8 @@ const win = (p, key) => p.locator(`.win[data-key="${key}"]`);
 let passed = 0;
 async function step(name, fn) {
   if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
+  if (step.done) return;                                          // UPTO=…: stop after the step whose name has it
+  if (process.env.UPTO && name.includes(process.env.UPTO)) step.done = true;
   try { await fn(); passed++; console.log('  ✓', name); }
   catch (e) { console.error('  ✗', name, '\n    ', e.message.split('\n').slice(0, 6).join('\n     ')); process.exitCode = 1; }
 }
@@ -1193,7 +1195,7 @@ await step('more touches: sound on the login screen, coffee rings, patterns, sha
   const g = await newUser(null, null, { entered: false });
   await g.goto(`${BASE}/`);
   const row = g.locator('.win[data-key="login"] .sound-row');
-  await row.locator('text=켜 두는 걸 추천해요').waitFor();
+  await g.locator('.win[data-key="login"] .sound-hint >> text=켜 두는 걸 추천해요').waitFor();
   assert.equal(await g.evaluate(() => localStorage.getItem('rn.sound')), null);
   await row.locator('button:text-is("켬")').click();
   assert.equal(await g.evaluate(() => localStorage.getItem('rn.sound')), '1');

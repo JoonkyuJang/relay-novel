@@ -54,6 +54,18 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     }
     el.style.left = `${Math.round(x)}px`; el.style.top = `${Math.round(y)}px`;
     clamp(el);
+    fitBottom(el);
+  }
+  // a new window (or one on a desktop that just got shorter) keeps its bottom — where the buttons are —
+  // on screen: move it up, and shrink it only if it is taller than the desktop
+  function fitBottom(el) {
+    if (isPhone()) return;
+    const b = bounds(), top = parseInt(el.style.top) || 0, left = parseInt(el.style.left) || 0;
+    if (el.offsetHeight > b.h - 8) el.style.height = `${Math.max(160, b.h - 8)}px`;
+    if (top + el.offsetHeight > b.h - 4) el.style.top = `${Math.max(0, b.h - el.offsetHeight - 4)}px`;
+    // …and its right edge (where 이어 쓰기 / 올리기 sit) on a narrow screen
+    if (el.offsetWidth > b.w - 8) el.style.width = `${Math.max(280, b.w - 8)}px`;
+    if (left + el.offsetWidth > b.w - 4) el.style.left = `${Math.max(0, b.w - el.offsetWidth - 4)}px`;
   }
 
   function makeDraggable(win) {
@@ -257,7 +269,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     }
   }
 
-  window.addEventListener('resize', () => { for (const w of wins.values()) clamp(w.el); });
+  window.addEventListener('resize', () => { for (const w of wins.values()) { clamp(w.el); if (!w.minimized && !w.shaded) fitBottom(w.el); } });
 
   return {
     open, close, focus, minimize, restore, tidy, shade,

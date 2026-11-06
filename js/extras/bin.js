@@ -66,9 +66,9 @@ export function showTip(el, content, { above = false } = {}) {
 export function hideTip() { openTip?.remove(); openTip = null; }
 addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
 
-export function hoverTip(el, content) {
+export function hoverTip(el, content, { delay = 350 } = {}) {
   let t = null;
-  const show = () => { clearTimeout(t); t = setTimeout(() => showTip(el, content), 350); };
+  const show = () => { clearTimeout(t); t = setTimeout(() => showTip(el, content), delay); };
   const hide = () => { clearTimeout(t); hideTip(); };
   el.addEventListener('mouseenter', show);
   el.addEventListener('mouseleave', hide);

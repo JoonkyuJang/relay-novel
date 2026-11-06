@@ -334,11 +334,17 @@ export function initSkyline(sky, currentPhase) {
   const lastDayBurst = () => { if (on('deadline_fireworks') && deadlineDay()) burst(3); };
   bus.on('any-completed', lastDayBurst);
   bus.on('story-completed', lastDayBurst);
+  // (looked at every hour, so a page opened days before still gets its finale; never twice)
+  let finaleFor = null;
   function scheduleFinale() {
-    const left = Date.parse(X('deadline')) - Date.now();
-    if (left > 0 && left < 24 * 3600e3) setTimeout(() => { if (on('deadline_fireworks')) burst(12); }, left);
+    const end = Date.parse(X('deadline')), left = end - Date.now();
+    if (!(left > 0 && left < 2 * 3600e3) || finaleFor === end) return;
+    finaleFor = end;
+    setTimeout(() => { if (on('deadline_fireworks') && Date.parse(X('deadline')) === end) burst(12); }, left);
   }
   scheduleFinale();
+  setInterval(scheduleFinale, 30 * 60e3);
+  bus.on('settings', scheduleFinale);
 
   const next = () => setTimeout(() => { gust(); next(); }, 150e3 + Math.random() * 150e3);
   setTimeout(gust, 20e3);

@@ -179,17 +179,21 @@ export function storyView(app, storyId) {
     placeTicks();
   }
 
-  // others' new lines type themselves in, letter by letter, and end with a carriage return
+  // new lines type themselves in, letter by letter: someone else's end with a carriage return,
+  // my own with the bell (it waits for the typing instead of ringing the moment I press Enter)
+  let myLine = null, typingUntil = 0;
+  const typingIn = () => on('type_in_lines') && !reduceMotion();
   function typeIn(fresh, items) {
-    if (!on('type_in_lines') || reduceMotion()) return;
-    const me = app.identity();
+    if (!typingIn()) return;
     for (const l of fresh) {
-      if (l.removed || (me && l.author_name === me.name && lastResult?.text === l.text)) continue;
+      if (l.removed) continue;
+      const mine = l.id === myLine;
       const li = items[story.lines.indexOf(l)];
       const node = li?.querySelector('.line-text')?.firstChild;
       if (!node || node.nodeType !== 3) continue;
       const chars = [...l.text];
       const step = Math.min(70, Math.max(28, 2200 / chars.length));
+      typingUntil = Math.max(typingUntil, Date.now() + chars.length * step);
       let i = 0;
       node.data = '';
       li.classList.add('typing-in');
@@ -201,7 +205,7 @@ export function storyView(app, storyId) {
         if (i >= chars.length) {
           clearInterval(t);
           li.classList.remove('typing-in');
-          play('ret');
+          if (mine) { myLine = null; play('bell'); } else play('ret');
           bus.emit('carriage', {});
         }
       }, step);
@@ -496,7 +500,8 @@ export function storyView(app, storyId) {
       lastBlockerSig = blockerSig;
       if (mode !== 'writing' && (prevMode !== mode || prevWriting !== s.writing || prevStatus !== s.status || prevCount !== s.line_count || blockerChanged || !foot.hasChildNodes())) renderFoot();
       else tick();
-      if (prevStatus === 'open' && s.status === 'completed') celebrate();
+      // (a story's last line types itself in first, then the completion)
+      if (prevStatus === 'open' && s.status === 'completed') setTimeout(() => { if (!closed) celebrate(); }, Math.max(0, typingUntil - Date.now()) + (typingUntil > Date.now() ? 400 : 0));
       else milestone(prevCount);
     } catch (e) {
       if (e.code === 'story_not_found') {
@@ -552,8 +557,8 @@ export function storyView(app, storyId) {
       typing?.send(null);
       if (r.result === 'accepted') {
         api.setDraft(storyId, '');
-        play('bell');
-        bus.emit('carriage', {});
+        if (typingIn() && r.line_id) myLine = r.line_id;       // the bell rings when it has typed itself in
+        else { play('bell'); bus.emit('carriage', {}); }
         bus.emit('my-line', { storyId });
         mode = r.story_status === 'completed' ? 'done' : 'idle';
       } else {
