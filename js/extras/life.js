@@ -163,3 +163,36 @@ export function initTicker() {
   api.watch(['list'], refresh);
   setTimeout(refresh, 1500);
 }
+
+// ------------------------------------------------------------ a newer version is out
+
+// A tab left open across a deploy keeps running the old code. Every so often (and on coming back to
+// the tab) look at index.html: if its versioned files (?v=…) differ from the ones this page loaded,
+// offer to reload — never force it, someone may be in the middle of a line.
+const assetSig = (html) => {
+  const block = html.split('assets:start')[1]?.split('assets:end')[0] ?? '';
+  return (block.match(/\?v=[0-9a-f]+/g) ?? []).join(',');
+};
+export function initUpdateCheck() {
+  const running = assetSig(document.head.innerHTML);
+  if (!running) return null;
+  let lastCheck = Date.now(), shown = false;
+  async function check() {
+    if (shown || document.hidden || Date.now() - lastCheck < 60e3) return;
+    lastCheck = Date.now();
+    try {
+      const r = await fetch(`./?_=${Date.now()}`, { cache: 'no-store' });
+      const live = assetSig(await r.text());
+      if (!live || live === running) return;
+      shown = true;
+      const note = h('div', { class: 'doze-note update-note', role: 'status' },
+        h('span', {}, '연문회 OS가 새로워졌어요.'),
+        h('button', { type: 'button', class: 'btn btn-sm', onclick: () => location.reload() }, '새로고침'),
+        h('button', { type: 'button', class: 'btn-link', onclick: () => note.remove() }, '나중에'));
+      document.body.append(note);
+    } catch { /* offline: next time */ }
+  }
+  setInterval(check, 10 * 60e3);
+  document.addEventListener('visibilitychange', check);
+  return { check: () => { lastCheck = 0; return check(); } };
+}

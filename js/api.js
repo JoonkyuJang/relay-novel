@@ -1,8 +1,13 @@
 // The only file that talks to the backend (plus small local-storage helpers).
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 
+// Every request gives up after 20 s (a phone on shaky campus wifi could otherwise leave a request —
+// and the button waiting on it — hanging forever); it then fails like any network error.
+const patientFetch = (url, opts = {}) =>
+  (!opts.signal && typeof AbortSignal.timeout === 'function') ? fetch(url, { ...opts, signal: AbortSignal.timeout(20000) }) : fetch(url, opts);
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true },
+  global: { fetch: patientFetch },
 });
 
 // ---------------------------------------------------------------- errors
@@ -202,10 +207,11 @@ export function logClientError({ message, source = null, stack = null, version =
 
 // Live "누군가 쓰는 중 (23자)": a Realtime broadcast per story, numbers only.
 export function typingChannel(storyId, onCount) {
-  let ch = null;
+  let ch = null, joined = false;
   try {
     ch = sb.channel(`typing:${storyId}`, { config: { broadcast: { self: false } } });
-    ch.on('broadcast', { event: 'n' }, ({ payload }) => onCount?.(payload?.n ?? null)).subscribe();
+    ch.on('broadcast', { event: 'n' }, ({ payload }) => onCount?.(payload?.n ?? null))
+      .subscribe((status) => { joined = status === 'SUBSCRIBED'; });
   } catch { ch = null; }
   let last = 0, timer = null, pending = null;
   return {
@@ -215,7 +221,8 @@ export function typingChannel(storyId, onCount) {
       const wait = Math.max(0, 350 - (Date.now() - last));
       timer = setTimeout(() => {
         timer = null; last = Date.now();
-        ch?.send({ type: 'broadcast', event: 'n', payload: { n: pending } }).catch?.(() => {});
+        // only over the live connection: without it supabase-js would POST every count over HTTP
+        if (joined) ch?.send({ type: 'broadcast', event: 'n', payload: { n: pending } }).catch?.(() => {});
       }, wait);
     },
     close() { clearTimeout(timer); try { ch && sb.removeChannel(ch); } catch { /* ignore */ } },
@@ -236,6 +243,7 @@ let live = false;                         // realtime channel subscribed
 const POLL_MS = 20000;                    // version check (one tiny request)
 const SWEEP_MS = 120000;                  // full refresh, for time-based changes (expired batons)
 const versions = new Map();               // signal key -> last seen version
+const seenEmpty = new Set();              // watched keys the server had no row for
 
 function notify(sub, jitter = 0) {
   clearTimeout(sub.t);
@@ -258,7 +266,16 @@ async function checkVersions() {
     for (const { key, version } of data) {
       const prev = versions.get(key);
       versions.set(key, version);
-      if (prev !== undefined && prev !== version) notifyKey(key);
+      if (prev !== undefined ? prev !== version : seenEmpty.has(key)) notifyKey(key);
+    }
+    // keys with no row yet (nothing has happened there so far, e.g. a fresh 방명록 after 초기화):
+    // when their first row shows up, that is a change too
+    // (and a row that vanished — a story removed by 관리 · 초기화 — is a change for its windows)
+    const got = new Set(data.map(r => r.key));
+    for (const k of keys) {
+      if (got.has(k)) { seenEmpty.delete(k); continue; }
+      seenEmpty.add(k);
+      if (versions.has(k)) { versions.delete(k); notifyKey(k); }
     }
   } catch { /* next round */ } finally { checking = false; }
 }
@@ -266,8 +283,9 @@ function ensureChannel() {
   if (channel) return;
   channel = sb.channel('signals')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'realtime_signals' }, (p) => {
-      const key = p.new?.key;
-      if (p.new?.version != null) versions.set(key, p.new.version);
+      const key = p.new?.key ?? p.old?.key;          // (a deleted row only carries its key in old)
+      if (!key) return;
+      if (p.new?.version != null) versions.set(key, p.new.version); else versions.delete(key);
       notifyKey(key);
     })
     .subscribe((status) => { live = status === 'SUBSCRIBED'; });

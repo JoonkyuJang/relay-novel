@@ -19,7 +19,7 @@ import { initCat } from './extras/cat.js';
 import { initSaver } from './extras/saver.js';
 import { initFun } from './extras/fun.js';
 import { injectStampDefs } from './extras/stamps.js';
-import { initTicker } from './extras/life.js';
+import { initTicker, initUpdateCheck } from './extras/life.js';
 
 initReports();                                   // crash reports first, so startup errors are caught too
 
@@ -300,6 +300,8 @@ const cat = initCat(app, wm, desktop);
 initSaver(app, wm, cat);
 initFun(app, wm, { cat, clockEl });
 initTicker();
+const updates = initUpdateCheck();
+window.__rnCheckUpdate = () => updates?.check();    // (tests)
 bus.on('theme', () => renderMenubar());
 bus.on('sound', () => renderMenubar());          // e.g. sound turned itself off after a long time away
 loadSettings();

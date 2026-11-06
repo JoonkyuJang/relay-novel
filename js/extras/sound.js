@@ -9,6 +9,8 @@ let synth = null;
 const DEBUG = prefs.get('debugSounds') === '1';
 function engine() {
   if (synth) return synth;
+  // browsers refuse to start audio before the first click / key on the page: don't even try
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return null;
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return null;
   try { synth = makeSynth(new AC()); } catch { return null; }
@@ -50,7 +52,7 @@ export function quietAfterMin() {
 }
 setInterval(() => {
   if (dozing || Date.now() - lastHere < quietAfterMin() * 60e3) return;
-  dozing = true;                                   // even forced sounds (낭독회, 자리 났어요) stop
+  dozing = true;                                   // even forced sounds (낭독회) stop
   if (soundOn()) { dozedOff = true; setSound(false); }
   if (synth?.ac.state === 'running') synth.ac.suspend().catch(() => {});
 }, 20e3);
@@ -67,7 +69,8 @@ function dozeNote() {
 // play('key', { ch: 'a' }), play('chime', { force: true }) …
 const lastAt = {};
 export function play(name, { force = false, ...opts } = {}) {
-  if (dozing || (!force && !soundOn())) return;
+  // dozing silences everything except 자리 났어요, which someone asked for and is waiting on
+  if ((dozing && name !== 'ding') || (!force && !soundOn())) return;
   if (document.hidden && name !== 'ding') return;            // a background tab stays quiet (except 자리 났어요)
   // the same interface sound twice within 90 ms (closing every window at log-out…) plays once
   if (UI.has(name)) { if (performance.now() - (lastAt[name] ?? -1e9) < 90) return; lastAt[name] = performance.now(); }

@@ -95,6 +95,7 @@ async function newUser(name, sid, { mobile = false, entered = true } = {}) {
     }, [name, sid]);
   }
   const page = await ctx.newPage();
+  if (process.env.CONSOLE) page.on('console', m => { if (['error', 'warning'].includes(m.type())) console.log('    [console]', name, m.type(), m.text().slice(0, 200)); });
   page.on('pageerror', e => { errors.push(`[${name}] ${e.message}`); console.error(`[${name}] pageerror`, e.message); });
   page.on('dialog', d => d.accept());
   return page;
@@ -1085,6 +1086,30 @@ await step('sound turns itself off 5 minutes after the last screen saver; a note
   await p.locator('.doze-note button:text-is("다시 켜기")').click();
   assert.equal(await p.evaluate(() => localStorage.getItem('rn.sound')), '1', 'turned back on');
   assert.equal(await p.locator('.sound-btn').getAttribute('aria-pressed'), 'true');
+});
+
+await step('a tab left open across a deploy offers to reload; no typing counts over HTTP without realtime', async () => {
+  const p = await newUser('오래된탭', '2026100816');
+  const http = [];
+  p.on('request', r => { if (r.url().includes('/realtime/v1/api/broadcast')) http.push(r.url()); });
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').waitFor();
+  await p.evaluate(() => window.__rnCheckUpdate());
+  assert.equal(await p.locator('.update-note').count(), 0, 'same version: no note');
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/js\/index\.js\?v=[0-9a-f]+/, 'js/index.js?v=00000000');
+  await p.route(u => new URL(u).searchParams.has('_'), r => r.fulfill({ status: 200, contentType: 'text/html', body: html }));
+  await p.evaluate(() => window.__rnCheckUpdate());
+  await p.locator('.update-note >> text=연문회 OS가 새로워졌어요.').waitFor();
+  await p.locator('.update-note button:text-is("나중에")').click();
+  // typing in a story while realtime is down must not POST a count per keystroke
+  const id = (await pool.query(`select public.create_story('타자 이야기', '첫 줄.', '첫줄', '2026100817', 'seed') as r`)).rows[0].r.story_id;
+  await p.goto(`${BASE}/#/story/${id}`);
+  const w = win(p, `story:${id}`);
+  await w.locator('button:text-is("이어 쓰기")').click();
+  await w.locator('textarea').pressSequentially('한 글자씩', { delay: 120 });
+  await p.waitForTimeout(800);
+  assert.deepEqual(http, []);
+  await w.locator('button:text-is("취소")').click();
 });
 
 // Last on purpose: it wipes the database.
