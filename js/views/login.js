@@ -1,6 +1,8 @@
-// 로그인: honor-system name + student number, kept on this device. Also the CRT switch.
+// 로그인: honor-system name + student number, kept on this device. Also the CRT and sound switches.
 import * as api from '../api.js';
 import { h, icon, errorText } from '../ui.js';
+import { on } from '../extras/extras.js';
+import { soundOn, setSound, play } from '../extras/sound.js';
 
 export function loginView(app, { reason = '' } = {}) {
   const saved = { name: api.prefs.get('lastName', ''), sid: api.prefs.get('lastSid', '') };
@@ -25,6 +27,18 @@ export function loginView(app, { reason = '' } = {}) {
     app.setCrt(v);
     crtOn.setAttribute('aria-pressed', String(v)); crtOff.setAttribute('aria-pressed', String(!v));
   }
+  // sound starts off; the login screen gently suggests turning it on (pressing 켬 also unlocks audio)
+  const sndOn = h('button', { type: 'button', 'aria-pressed': String(soundOn()), onclick: () => setSnd(true) }, '켬');
+  const sndOff = h('button', { type: 'button', 'aria-pressed': String(!soundOn()), onclick: () => setSnd(false) }, '끔');
+  const sndHint = h('span', { class: 'sound-hint' }, '켜 두는 걸 추천해요 · 타자기 소리, 낭독회 목소리, 고양이');
+  function setSnd(v) {
+    setSound(v);
+    if (v) play('pop');
+    sndOn.setAttribute('aria-pressed', String(v)); sndOff.setAttribute('aria-pressed', String(!v));
+    sndHint.classList.toggle('on', v);
+    sndHint.textContent = v ? '소리를 켰어요 · 메뉴 막대에서 언제든 끌 수 있어요' : '켜 두는 걸 추천해요 · 타자기 소리, 낭독회 목소리, 고양이';
+    app.refreshMenubar?.();
+  }
 
   const form = h('form', { class: 'login', novalidate: true },
     h('div', { class: 'brand' }, icon('logo', 40),
@@ -35,6 +49,8 @@ export function loginView(app, { reason = '' } = {}) {
     h('div', { class: 'label' }, h('label', { for: 'lg-sid' }, '학번'), sid),
     h('div', { class: 'row' }, h('span', { id: 'lg-crt' }, '화면 효과 (CRT)'),
       h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-crt' }, crtOn, crtOff)),
+    on('sound') ? h('div', { class: 'row sound-row' }, h('span', { id: 'lg-snd' }, '소리', h('br'), sndHint),
+      h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-snd' }, sndOn, sndOff)) : null,
     h('p', { class: 'muted', style: 'margin:0;line-height:18px' },
       (app.settings?.show_student_id ?? true)
         ? '이름과 학번은 쓴 줄과 함께 저장되고, 줄의 속성 창에서 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'
@@ -77,7 +93,7 @@ export function loginView(app, { reason = '' } = {}) {
   body.append(scroll);
   return {
     type: 'login', route: '/login', title: '연문회 OS — 로그인', body,
-    size: { w: 460, h: 500 }, position: 'center', remember: false, closable: false, resizable: false,
+    size: { w: 460, h: 556 }, position: 'center', remember: false, closable: false, resizable: false,
     className: 'login-win',
     mount() { setTimeout(() => (name.value ? sid : name).focus({ preventScroll: true }), 50); },
   };

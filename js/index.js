@@ -11,15 +11,17 @@ import { loginView } from './views/login.js';
 import { helpView } from './views/help.js';
 import { readingView } from './views/reading.js';
 import { mineView } from './views/mine.js';
+import { recapView } from './views/recap.js';
 import { initReports } from './extras/report.js';
-import { setExtras, on, bus } from './extras/extras.js';
+import { setExtras, on, bus, deadlineOver } from './extras/extras.js';
 import { initDayNight, phaseButton } from './extras/daynight.js';
 import { initDesk, deadlineEl, soundButton, memoView, aboutView } from './extras/desk.js';
 import { initCat } from './extras/cat.js';
 import { initSaver } from './extras/saver.js';
 import { initFun } from './extras/fun.js';
 import { injectStampDefs } from './extras/stamps.js';
-import { initTicker, initUpdateCheck } from './extras/life.js';
+import { initTicker, initUpdateCheck, initTabIcon } from './extras/life.js';
+import { initRings } from './extras/rings.js';
 
 initReports();                                   // crash reports first, so startup errors are caught too
 
@@ -64,8 +66,11 @@ const app = {
     else updateNav('/stories');
   },
   admin: false,
+  // 결산 opens after the deadline (admins can look early)
+  recapOpen: () => on('recap') && (deadlineOver() || app.admin),
   afterAdminLogin() {
     app.admin = true;
+    bus.emit('settings', {});                 // (admins see the 결산 icon early)
     if (!api.hasEntered()) api.setGuest();
     wm.close('login');
     $('.bootlog')?.remove();
@@ -109,6 +114,7 @@ function resolve(route) {
   if (route === '/memo' && on('memo')) return ['memo', () => memoView(app)];
   if (route === '/about' && on('about')) return ['about', () => aboutView(app)];
   if (route === '/mine' && on('my_lines')) return ['mine', () => mineView(app)];
+  if (route === '/recap' && app.recapOpen()) return ['recap', () => recapView(app)];
   const a = route.match(/^\/admin\/story\/([0-9a-f-]{36})$/i);
   if (a && app.admin) return [`admin-story:${a[1].toLowerCase()}`, () => lazyView(
     { type: 'admin-story', route, title: '관리 · 이야기', size: { w: 960, h: 600 }, minSize: { w: 720, h: 400 }, origin: { x: 120, y: 60 } },
@@ -279,8 +285,17 @@ async function loadSettings() {
     if (api.prefs.get('crt') == null) { app.crt = on('crt_default'); document.body.classList.toggle('crt', app.crt); }
     renderMenubar();
     forEachView(v => v.onSettings?.());
+    // a link to a window that depends on the settings (#/recap after the deadline, #/mine, #/about…) may have
+    // been opened before they arrived and fallen back to the 서랍: open what it really asked for
+    if (!settingsSeen && api.hasEntered()) {
+      const route = bootRoute, [key] = resolve(route);
+      if (route !== '/stories' && route !== '/login' && !wm.has(key)) openRoute(route);
+    }
+    settingsSeen = true;
   } catch { /* views fall back to defaults */ }
 }
+let settingsSeen = false;
+const bootRoute = currentRoute();                 // (the address may be rewritten before the settings arrive)
 
 api.presence((n) => {
   presenceCount = n;
@@ -296,10 +311,13 @@ renderNav();
 injectStampDefs();
 initDayNight(desktop);
 initDesk(app, wm, { desktop, iconsNav });
+initRings(desktop);
 const cat = initCat(app, wm, desktop);
+if (api.prefs.get('debugSounds') === '1') window.__rnCat = cat;     // (tests)
 initSaver(app, wm, cat);
 initFun(app, wm, { cat, clockEl });
 initTicker();
+initTabIcon(wm);
 const updates = initUpdateCheck();
 window.__rnCheckUpdate = () => updates?.check();    // (tests)
 bus.on('theme', () => renderMenubar());

@@ -2,6 +2,7 @@
 import * as api from '../api.js';
 import { h, icon, fmtTime, errorText, attachReveal } from '../ui.js';
 import { bus } from '../extras/extras.js';
+import { flyPlane } from '../extras/plane.js';
 
 const pad3 = (n) => String(n).padStart(3, '0');
 
@@ -118,6 +119,7 @@ export function guestbookView(app) {
     try {
       const text = ta.value;
       await api.postGuestbook(text, ident);
+      flyPlane(ta, text);                                   // the note folds into a paper airplane
       bus.emit('guestbook-posted', { text });
       ta.value = ''; update();
       await refresh();

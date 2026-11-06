@@ -5,10 +5,37 @@ import * as api from '../api.js';
 import { h } from '../ui.js';
 import { isPhone } from '../wm.js';
 import { SPRITES } from './cat-sprites.js';
-import { on, X, fun, bus, reduceMotion } from './extras.js';
+import { on, X, fun, bus, reduceMotion, deadlineHour } from './extras.js';
 import { play, voice, soundOn } from './sound.js';
 import { currentPhase } from './daynight.js';
 import { getTrashCount, pullBallOut } from './bin.js';
+import { stampSvg } from './stamps.js';
+
+// ---------------------------------------------------------------- 고양이 선물 (kept on this device)
+
+const GIFT_ART = {
+  ginkgo:  { name: '은행잎', color: '#E8B931', rows: ['.#####..', '#######.', '#######.', '.#####..', '..###...', '...#....', '...#....'] },
+  maple:   { name: '단풍잎', color: '#D9774F', rows: ['...#...', '.#.#.#.', '#######', '.#####.', '..###..', '.#.#.#.', '...#...'] },
+  feather: { name: '깃털', color: '#9AA6C6', rows: ['....##', '...###', '..###.', '.###..', '###...', '#.....'] },
+  button:  { name: '단추', color: '#C8553D', rows: ['.####.', '#....#', '#.##.#', '#.##.#', '#....#', '.####.'] },
+  pencil:  { name: '몽당연필', color: '#E9A04A', rows: ['......##', '.....###', '....###.', '...###..', '..###...', '.###....', '##......'] },
+};
+const STAMP_GIFTS = ['sun', 'laugh', 'cur'];
+export const GIFT_NAMES = { ...Object.fromEntries(Object.entries(GIFT_ART).map(([k, v]) => [k, v.name])), sun: '참 잘했어요 도장', laugh: '재밌어요 도장', cur: '다음이 궁금해요 도장', ball: '종이 공' };
+export function giftArt(kind, size = 20) {
+  if (STAMP_GIFTS.includes(kind)) return stampSvg(kind, { size });
+  if (kind === 'ball') return h('i', { class: 'floor-ball', style: 'position:static;display:inline-block;width:14px;height:13px' });
+  const { rows, color } = GIFT_ART[kind];
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${rows[0].length} ${rows.length}`);
+  svg.setAttribute('width', size); svg.setAttribute('height', Math.round(size * rows.length / rows[0].length));
+  svg.setAttribute('shape-rendering', 'crispEdges'); svg.setAttribute('aria-hidden', 'true');
+  let d = ''; rows.forEach((r, y) => [...r].forEach((c, x) => { if (c === '#') d += `M${x} ${y}h1v1h-1z`; }));
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', d); path.setAttribute('fill', color);
+  svg.append(path);
+  return svg;
+}
+export const myGifts = () => api.prefs.getJSON('gifts') ?? {};
 
 export const PALETTES = {
   day:   { o: '#1D2A44', e: '#1D2A44', w: '#FFFBF4', c: '#D9774F', k: '#6B7591', p: '#E58AA6' },
@@ -115,13 +142,87 @@ export function initCat(app, wm, desktop) {
     if (state !== 'sit' || document.hidden || isPhone()) { later(decide, 8000); return; }
     const r = Math.random();
     const wins = wm.wins().filter(w => !w.minimized && w.el.offsetWidth > 200 && w.view.type !== 'login');
-    if (on('cat_wander') && r < 0.42) walkTo(rand(60, desktop.clientWidth - 160));
+    // the deadline's last hour: the cat paces back and forth
+    const pace = on('deadline_fireworks') && deadlineHour();
+    if (on('cat_wander') && r < (pace ? 0.8 : 0.42)) walkTo(rand(60, desktop.clientWidth - 160), pace ? { speed: 70 } : undefined);
     else if (on('cat_wander') && r < 0.64 && wins.length) napOn(wins[Math.floor(Math.random() * wins.length)]);
     else if (on('cat_seal_nap') && r < 0.76 && sealSpot()) napOnSeal();
     else if (on('cat_belly') && r < 0.84) belly();
     else if (on('cat_wander') && on('trash') && r < 0.88 && getTrashCount() > 0 && document.querySelector('#icons .icon.trash')?.offsetParent) digTrash();
+    else if (on('cat_mischief') && r < 0.92) mischief();
     else sit();
   }
+
+  // ---------------------------------------------------------- 장난: nudge the sticky note, knock the bin over, bat the tray
+  function mischief() {
+    const d = desktop.getBoundingClientRect();
+    const trash = document.querySelector('#icons .icon.trash');
+    const sticky = document.querySelector('.sticky:not([hidden])');
+    const tray = document.querySelector('.tray:not([hidden]) .tray-btn');
+    const options = [
+      sticky && ['sticky', sticky], sticky && ['sticky', sticky],
+      tray && ['tray', tray], tray && ['tray', tray],
+      on('trash') && trash?.offsetParent && ['trash', trash],
+    ].filter(Boolean);
+    if (!options.length) { sit(); return; }
+    const [kind, target] = options[Math.floor(Math.random() * options.length)];
+    const r = (kind === 'trash' ? target.querySelector('svg') : target).getBoundingClientRect();
+    const right = kind === 'trash';                                // the bin is at the right edge: come from its left
+    const tx = Math.min(desktop.clientWidth - 40, Math.max(40, (right ? r.left - 30 : r.right + 26) - d.left));
+    walkTo(tx, { then: () => {
+      clearTimers(); state = 'busy';
+      flip = !right; img.style.transform = flip ? 'scaleX(-1)' : '';
+      setFrame('reach'); el.classList.add('reaching');
+      later(() => {
+        el.classList.remove('reaching');
+        if (kind === 'sticky') {                                  // a little shove, and it stays shoved (this visit)
+          const [dx, rot] = [(Number(target.dataset.dx) || 0) + 10 + Math.round(Math.random() * 14), (Math.random() * 6 - 3).toFixed(1)];
+          target.dataset.dx = Math.min(dx, 160);
+          target.style.translate = `${target.dataset.dx}px 0`;
+          target.style.rotate = `${rot}deg`;
+          play('lid');
+          setFrame('happy'); later(sit, 1400);
+        } else if (kind === 'tray') {
+          target.classList.remove('batted'); void target.offsetWidth; target.classList.add('batted');
+          play('select');
+          setFrame('happy'); later(sit, 1400);
+        } else {                                                  // over it goes — and the cat bolts
+          bus.emit('trash-knock', { el: target });
+          say('!', 900);
+          later(() => { state = 'sit'; api_.run(); }, 200);
+        }
+      }, 600);
+    } });
+  }
+
+  // ---------------------------------------------------------- 선물: now and then something is left on the floor
+  function dropGift() {
+    const kinds = [...Object.keys(GIFT_ART), ...STAMP_GIFTS, 'ball', 'ginkgo', 'ginkgo', 'maple'];
+    const kind = kinds[Math.floor(Math.random() * kinds.length)];
+    const gx = Math.max(16, Math.min(desktop.clientWidth - 30, isPhone() ? x - W / 2 - 24 : x + (flip ? 30 : -46)));
+    const gift = h('button', { type: 'button', class: 'cat-gift', 'aria-label': `${X('cat_name')}의 선물: ${GIFT_NAMES[kind]} (누르면 줍기)`, title: `${GIFT_NAMES[kind]} · 누르면 주워요` }, giftArt(kind, 18));
+    Object.assign(gift.style, { left: `${Math.round(gx)}px`, top: `${Math.round(floorY() - 20)}px` });
+    layer.append(gift);
+    api.prefs.set('giftAt', String(Date.now()));
+    play('pop');
+    say('♪', 1200);
+    gift.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const g = myGifts(); g[kind] = (g[kind] ?? 0) + 1; api.prefs.setJSON('gifts', g);
+      const f = h('span', { class: 'gift-got', 'aria-hidden': 'true' }, `+1 ${GIFT_NAMES[kind]}`);
+      f.style.left = gift.style.left; f.style.top = `${parseInt(gift.style.top) - 18}px`;
+      layer.append(f); setTimeout(() => f.remove(), 1500);
+      play('select');
+      gift.remove();
+    });
+  }
+  // every minute or so, a small chance — at most one gift every 20 minutes on this device
+  setInterval(() => {
+    if (!on('cat') || !on('cat_gifts') || el.hidden || document.hidden || !api.hasEntered()) return;
+    if (!['sit', 'look'].includes(state) || layer.querySelector('.cat-gift')) return;
+    if (Date.now() - Number(api.prefs.get('giftAt') ?? 0) < 20 * 60e3) return;
+    if (Math.random() < 1 / 25) dropGift();
+  }, 60e3);
 
   // 휴지통 뒤지기: walk to the bin, fish a paper ball out and bat it along the floor a few times
   function digTrash() {
@@ -341,6 +442,9 @@ export function initCat(app, wm, desktop) {
     show() { state = 'sit'; home(); },
     look(dir) { if (state === 'sit') { flip = dir < 0; setFrame('look'); img.style.transform = flip ? 'scaleX(-1)' : ''; } },
     refresh() { setFrame(frameName); },
+    // (for tests: make these happen now)
+    gift: () => dropGift(),
+    mischief: () => mischief(),
   };
 
   // cursor: look at it when near, stretch up when it hovers over the head

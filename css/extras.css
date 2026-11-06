@@ -562,3 +562,96 @@ body.phase-night .bin-heap i { border-color: #1D2A44; }
 .floor-ball { position: absolute; width: 16px; height: 15px; background: var(--paper); border: 2px solid var(--ink); border-radius: 50% 40% 55% 45%; pointer-events: none;
   background-image: linear-gradient(135deg, transparent 45%, var(--rule) 45% 58%, transparent 58%); }
 @media (prefers-reduced-motion: reduce) { .bin-heap .stink { animation: none; } }
+
+/* login: the sound switch nudges people to turn it on */
+.login .sound-hint { font-size: 11px; color: var(--stamp); }
+.login .sound-hint.on { color: var(--faint); }
+.login .sound-row:has(button[aria-pressed="true"]:first-child) .sound-hint { color: var(--faint); }
+
+/* 늦은 밤 커피 자국 (js/extras/rings.js) */
+.ring-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.ring { position: absolute; pointer-events: auto; color: #7A4A26; }
+.ring svg { display: block; width: 100%; height: 100%; }
+.ring path { fill: currentColor; }
+body.phase-dusk .ring { color: #5C3424; }
+body.phase-night .ring { color: #C9A47A; }
+body.amber .ring-layer { display: none; }
+.help-desk { margin: 12px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 18px; }
+
+/* the cat's mischief and gifts */
+.tray-btn.batted { animation: batted .5s steps(4) 1; }
+@keyframes batted { 25% { translate: 6px -3px; rotate: 6deg; } 60% { translate: -2px 0; rotate: -3deg; } }
+.cat-gift { position: absolute; pointer-events: auto; padding: 2px; border: none; background: none; line-height: 0; cursor: pointer; animation: gift-drop .5s steps(4) 1; }
+.cat-gift:hover { filter: drop-shadow(0 0 0 var(--ink)) drop-shadow(1px 1px 0 var(--ink)); }
+@keyframes gift-drop { 0% { translate: 0 -14px; } 60% { translate: 0 2px; } 100% { translate: 0 0; } }
+.gift-got { position: absolute; font-size: 11px; white-space: nowrap; color: var(--stamp); pointer-events: none; animation: float-up 1.4s steps(8) 1 forwards; }
+.gift-shelf { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.gift-item { display: inline-flex; align-items: center; gap: 2px; }
+@media (prefers-reduced-motion: reduce) { .tray-btn.batted, .cat-gift, .gift-got { animation: none !important; } }
+
+/* 방명록 종이비행기 (js/extras/plane.js) */
+.paper-plane { position: fixed; z-index: 2400; pointer-events: none; line-height: 0; }
+.icon.bump svg, .dock a.bump svg { animation: bin-bump .45s steps(4) 1; transform-origin: 50% 100%; }
+
+/* 인주 (js/extras/stamps.js) */
+.stamp-btn svg.thunk { opacity: var(--ink, 1); }
+.stamp-btn.re-ink svg { animation: re-ink .52s steps(4) 1; }
+@keyframes re-ink { 0%, 50%, 100% { translate: 0 0; } 25%, 75% { translate: 0 5px; } }
+.stamp-btn.re-ink::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 26px; height: 5px; translate: -50% 0; background: #C23B32; border: 1px solid var(--ink); border-radius: 2px; }
+.stamp-btn { position: relative; }
+
+/* 도장 수첩 (js/views/mine.js) */
+.stamp-card { margin: 0 0 14px; padding: 12px 14px; border: 2px solid var(--ink); background: #FFFDF8 repeating-linear-gradient(to bottom, transparent 0 21px, #EEF1F6 21px 22px); }
+.stamp-card h3 { margin: 0 0 10px; font-size: 13px; }
+.stamp-card ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 6px; }
+.badge-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.badge-seal { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--rule); border-radius: 50%; color: var(--rule); font-family: var(--text); font-size: 16px; line-height: 1; }
+.badge-cell.got .badge-seal { border: 3px double #C23B32; color: #C23B32; rotate: -8deg; font-weight: 700; box-shadow: inset 0 0 0 2px rgba(194,59,50,.15); }
+.badge-cell.got .badge-seal:has(+ .badge-name) { letter-spacing: -1px; }
+.badge-cell.fresh .badge-seal { animation: thunk .5s steps(4) 1; }
+.badge-name { font-size: 10px; line-height: 13px; color: var(--faint); }
+.badge-cell.got .badge-name { color: var(--ink); }
+@media (max-width: 767px) { .stamp-card ul { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { .badge-cell.fresh .badge-seal { animation: none; } }
+
+/* 2026 가을 결산 (js/views/recap.js) */
+.recap-stage { flex: 1; min-height: 0; overflow: auto; display: flex; }
+.recap-page { margin: auto; padding: 22px 26px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.recap-page h2 { margin: 0; font-family: var(--text); font-size: 26px; line-height: 32px; }
+.recap-page h3 { margin: 0; font-size: 14px; }
+.recap-kicker { margin: 0; color: var(--faint); letter-spacing: .1em; }
+.recap-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; width: 100%; max-width: 380px; }
+.recap-grid > div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 2px solid var(--ink); background: #FFFDF8; box-shadow: 3px 3px 0 var(--ink); }
+.recap-big { font-family: var(--text); font-size: 15px; } .recap-big b { font-size: 28px; line-height: 34px; color: var(--stamp); }
+.recap-page blockquote { margin: 0; max-width: 400px; padding: 12px 16px; border: 2px solid var(--ink); background: #FFFDF8 repeating-linear-gradient(to bottom, transparent 0 25px, #EEF1F6 25px 26px); text-align: left; }
+.recap-page blockquote p { margin: 0 0 8px; font-family: var(--text); font-size: 16px; line-height: 26px; }
+.recap-page cite { font-style: normal; color: var(--faint); font-size: 11px; }
+.recap-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; line-height: 20px; }
+.recap-list b { color: var(--stamp); }
+.recap-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 2px solid var(--ink); }
+.recap-dots { display: flex; gap: 6px; } .recap-dots i { width: 8px; height: 8px; border: 1px solid var(--ink); } .recap-dots i.on { background: var(--ink); }
+.recap-link { color: var(--stamp); }
+
+/* the last day: fireworks over 학생회관, a blinking clock in the last hour */
+.firework { position: absolute; width: 0; height: 0; pointer-events: none; }
+.firework::before { content: ""; position: absolute; left: -2px; top: -2px; width: 4px; height: 6px; background: var(--c); animation: fw-rise .5s steps(6) 1 both; }
+.firework i { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; background: var(--c); opacity: 0; animation: fw-burst 1.6s steps(8) .5s 1 forwards; }
+@keyframes fw-rise { 0% { transform: translateY(var(--rise)); opacity: 1; } 99% { transform: translateY(0); opacity: 1; } 100% { opacity: 0; } }
+@keyframes fw-burst { 0% { opacity: 1; transform: translate(0, 0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 24px)); } }
+.deadline.final-hour { animation: final-blink 1s steps(1) infinite; }
+@keyframes final-blink { 50% { background: var(--stamp); color: var(--cream); border-color: var(--stamp); } }
+@media (prefers-reduced-motion: reduce) { .deadline.final-hour, .firework, .firework i, .firework::before { animation: none !important; } }
+
+/* 말아 올리기 (window shade) */
+.win.shaded { min-height: 0; }
+.win.shaded .win-body, .win.shaded .win-grip { display: none; }
+.win.shaded .win-title { border-bottom: none; }
+
+/* 바탕 무늬 (right-click the desktop): 점 (default) · 원고지 · 은행잎 · 무늬 없음 */
+body.pattern-grid { background-image: linear-gradient(rgba(194,85,61,.13) 1px, transparent 1px), linear-gradient(90deg, rgba(194,85,61,.13) 1px, transparent 1px); background-size: 22px 22px; }
+body.pattern-ginkgo { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' shape-rendering='crispEdges'%3E%3Cpath d='M5 5h5v1h1v2h-1v1H9v2H8v2H7v-2H6v-1H5V9H4V6h1zM17 15h3v1h1v2h-1v1h-1v2h-1v-2h-1v-1h-1v-2h1z' fill='%23E8B931' fill-opacity='.28'/%3E%3C/svg%3E"); background-size: 48px 48px; }
+body.pattern-plain { background-image: none; }
+body.pattern-grid .sky-layer::after { background-image: linear-gradient(rgba(29,42,68,.10) 1px, transparent 1px), linear-gradient(90deg, rgba(29,42,68,.10) 1px, transparent 1px) !important; background-size: 22px 22px !important; }
+body.pattern-grid.phase-night .sky-layer::after { background-image: linear-gradient(rgba(255,249,239,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,249,239,.07) 1px, transparent 1px) !important; }
+body.pattern-ginkgo .sky-layer::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' shape-rendering='crispEdges'%3E%3Cpath d='M5 5h5v1h1v2h-1v1H9v2H8v2H7v-2H6v-1H5V9H4V6h1zM17 15h3v1h1v2h-1v1h-1v2h-1v-2h-1v-1h-1v-2h1z' fill='%23E8B931' fill-opacity='.28'/%3E%3C/svg%3E") !important; background-size: 48px 48px !important; }
+body.pattern-plain .sky-layer::after { background-image: none !important; }

@@ -526,6 +526,30 @@ await test('little touches: new switches default on, 첫눈 date is a real date'
   await admin('admin_update_settings', { p: { extras: { snow_from: '2026-12-01T00:00:00+09:00', skyline: true } } });
 });
 
+await test('커피 자국, 결산, 도장 수첩 facts: late-night lines only, no names anywhere', async () => {
+  const id = (await rpc('create_story', { p_title: '밤의 이야기', p_text: '낮에 시작', ...who(9400) })).story_id;
+  await su(`update app.stories set max_lines = 3, max_chars = 5 where id = $1`, [id]);
+  for (const i of [9401, 9402]) {
+    const b = await rpc('claim_baton', { p_story_id: id, ...who(i) });
+    await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: i === 9402 ? '다섯글자임' : '새벽에', ...who(i), p_token: b.token });
+  }
+  const lines = (await rpc('get_story', { p_story_id: id })).lines;
+  await su(`update app.lines set created_at = '2026-11-07 03:12:00+09' where id = $1`, [lines[1].id]);   // 새벽 3시 12분
+  const rings = await rpc('night_rings');
+  assert.ok(rings.some(r => r.id === lines[1].id) && !rings.some(r => r.id === lines[0].id));
+  assert.deepEqual(Object.keys(rings[0]).sort(), ['at', 'id']);
+  const r = await rpc('season_recap');
+  for (const k of ['stories', 'completed', 'lines', 'chars', 'writers', 'stamps', 'trash', 'cat_pets', 'guestbook', 'night_lines']) assert.equal(typeof r[k], 'number', k);
+  assert.ok(r.night_lines >= 1 && r.latest_night);
+  assert.ok(!JSON.stringify(r).includes('작가94'), 'no names in 결산');
+  const last = await rpc('my_lines', { p_student_id: '2026009402', p_name: '작가9402' });
+  assert.equal(last[0].last, true); assert.equal(last[0].full, true);
+  const mid = await rpc('my_lines', { p_student_id: '2026009401', p_name: '작가9401' });
+  assert.equal(mid[0].last, false); assert.equal(mid[0].full, false);
+  const s = await rpc('get_public_settings');
+  for (const k of ['coffee_rings', 'cat_mischief', 'cat_gifts', 'guestbook_plane', 'stamp_ink', 'stamp_card', 'recap', 'deadline_fireworks', 'desk_patterns', 'window_shade', 'tab_icon']) assert.equal(s.extras[k], true, k);
+});
+
 await test('관리 · 초기화: counts, test stories only, then everything; admin-only', async () => {
   await assert.rejects(rpc('admin_reset', { p_what: ['cat_pets'] }), /permission denied/);
   await expectErr(rpc('admin_reset', { p_what: ['cat_pets'] }, { as: 'authenticated', sub: USER }), 'not_admin');

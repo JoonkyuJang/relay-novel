@@ -1185,6 +1185,104 @@ await step('휴지통: letting go of a line crumples the box into the bin (deskt
   await m.locator('.toss-ball').waitFor({ state: 'detached', timeout: 2000 });
 });
 
+await step('more touches: sound on the login screen, coffee rings, patterns, shade, plane, ink, stamp card, cat, 결산, fireworks', async () => {
+  const q = (sql, a) => pool.query(sql, a).then(r => r.rows[0]?.r);
+  let k = 0;
+  const add = async (id, t, n = `손님${k}`) => { const sid = `20262${String(k++).padStart(5, '0')}`; const b = await q(`select public.claim_baton($1, $2, $3, 'seed') as r`, [id, n, sid]); return q(`select public.submit_line($1, $2, $3, $4, $5, 'seed', $6) as r`, [id, b.parent_id, t, n, sid, b.token]); };
+  // the login screen offers sound (off until pressed)
+  const g = await newUser(null, null, { entered: false });
+  await g.goto(`${BASE}/`);
+  const row = g.locator('.win[data-key="login"] .sound-row');
+  await row.locator('text=켜 두는 걸 추천해요').waitFor();
+  assert.equal(await g.evaluate(() => localStorage.getItem('rn.sound')), null);
+  await row.locator('button:text-is("켬")').click();
+  assert.equal(await g.evaluate(() => localStorage.getItem('rn.sound')), '1');
+
+  // a line written at 3 a.m. leaves a coffee ring; hovering it explains
+  const id = (await q(`select public.create_story('새벽 이야기', '새벽 세 시.', '첫줄', '2026200999', 'seed') as r`)).story_id;
+  await pool.query('update app.stories set max_lines = 8 where id = $1', [id]);
+  await add(id, '모두 잠든 시간이었다.', '수첩주인');
+  await pool.query(`update app.lines set created_at = (date_trunc('day', now() at time zone 'Asia/Seoul') + interval '3 hours 12 minutes') at time zone 'Asia/Seoul' where story_id = $1 and depth = 2`, [id]);
+  const p = await newUser('구경꾼', '2026100823');
+  await p.addInitScript(() => { localStorage.setItem('rn.debugSounds', '1'); localStorage.setItem('rn.sound', '1'); });
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').waitFor();
+  await win(p, 'stories').locator('.win-close').click();
+  await p.locator('.ring').first().waitFor();
+  await p.locator('.ring').last().hover();
+  await p.locator('.hover-tip >> text=늦은 밤의 커피 자국').waitFor();
+  await p.screenshot({ path: `${SHOTS}/40-coffee-rings.png` });
+  await p.mouse.move(5, 300);
+  // 바탕 무늬 from the desktop menu; 말아 올리기 from a title bar
+  await p.mouse.click(600, 420, { button: 'right' });
+  await p.locator('.ctx >> text=바탕 무늬 바꾸기').click();
+  assert.ok((await p.evaluate(() => document.body.className)).includes('pattern-grid'));
+  await p.click('.icon[data-route="/stories"]');
+  await win(p, 'stories').locator('.win-title h2').click({ button: 'right' });
+  await p.locator('.ctx >> text=말아 올리기').click();
+  await p.locator('.win[data-key="stories"].shaded').waitFor();
+  assert.ok((await win(p, 'stories').boundingBox()).height < 40);
+  await win(p, 'stories').locator('.win-title h2').click({ button: 'right' });
+  await p.locator('.ctx >> text=펼치기').click();
+  await p.locator('.win[data-key="stories"]:not(.shaded)').waitFor();
+  // a 방명록 note folds into a paper airplane
+  await p.click('.icon[data-route="/guestbook"]');
+  await win(p, 'guestbook').locator('textarea').fill('비행기로 날아가요');
+  await win(p, 'guestbook').locator('button:text-is("남기기")').click();
+  await p.locator('.paper-plane').waitFor({ state: 'attached', timeout: 2000 });
+  await p.locator('.paper-plane').waitFor({ state: 'detached', timeout: 4000 });
+  await win(p, 'guestbook').locator('.win-close').click();
+  // 인주: three quick stamps use it up, the fourth dabs the pad first
+  const lines = (await q(`select jsonb_agg(id order by depth) as r from app.lines where story_id = $1`, [id]));
+  await p.goto(`${BASE}/#/story/${id}`);
+  const w = win(p, `story:${id}`);
+  await w.locator('.line').nth(1).waitFor();
+  await p.evaluate(() => { window.__rnSounds = []; });
+  await w.locator('.line').nth(0).locator('.who').click();
+  for (let i = 0; i < 3; i++) { await p.locator('.props .stamp-btn').nth(i).click(); await p.waitForTimeout(250); }
+  await p.keyboard.press('Escape');
+  await w.locator('.line').nth(1).locator('.who').click();
+  await p.locator('.props .stamp-btn').first().click();
+  await p.waitForFunction(() => window.__rnSounds.includes('dab'));
+  await p.keyboard.press('Escape');
+  void lines;
+  // the writer's 도장 수첩: 첫 줄 and 올빼미 are inked
+  const writer = await newUser('수첩주인', '2026200000');
+  await writer.goto(`${BASE}/#/mine`);
+  await writer.locator('.stamp-card .badge-cell.got >> text=첫 줄').waitFor();
+  await writer.locator('.stamp-card .badge-cell.got >> text=올빼미').waitFor();
+  await writer.locator('.win[data-key="mine"]').screenshot({ path: `${SHOTS}/41-stamp-card.png` });
+  // the cat: a gift to pick up, and some mischief
+  await p.evaluate(() => window.__rnCat.gift());
+  await p.locator('.cat-gift').click();
+  assert.equal(Object.values(await p.evaluate(() => JSON.parse(localStorage.getItem('rn.gifts')))).reduce((a, b) => a + b, 0), 1);
+  await p.goto(`${BASE}/#/about`);
+  await win(p, 'about').locator('.gift-shelf').waitFor();
+  await win(p, 'about').locator('.win-close').click();
+  await p.evaluate(() => window.__rnCat.mischief());
+  await p.waitForFunction(() => document.querySelector('.paper-ball') || document.querySelector('.sticky')?.style.translate || document.querySelector('.tray-btn.batted'), null, { timeout: 15000 });
+  // 결산: after the deadline (an icon on the desktop, a few pages)
+  await pool.query(`update app.settings set extras = extras || '{"deadline": "2026-11-01T00:00:00+09:00"}'::jsonb`);
+  await p.goto(`${BASE}/?again=1#/recap`);
+  await win(p, 'recap').locator('.recap-page >> text=2026 가을 결산').waitFor();
+  assert.ok(await p.locator('#icons a[href="#/recap"]').count());
+  await win(p, 'recap').locator('button[aria-label="다음"]').click();
+  await win(p, 'recap').locator('text=이만큼 썼어요').waitFor();
+  // the last day: a story completed anywhere sends a firework over 학생회관
+  const tomorrow = await q(`select to_char((date_trunc('day', now() at time zone 'Asia/Seoul') + interval '1 day'), 'YYYY-MM-DD"T"00:00:00+09:00') as r`);
+  await pool.query(`update app.settings set extras = extras || jsonb_build_object('deadline', $1::text)`, [tomorrow]);
+  await p.goto(`${BASE}/?last=1#/stories`);
+  await win(p, 'stories').waitFor();
+  await p.waitForTimeout(1500);
+  const fin = (await q(`select public.create_story('마지막 날', '하나.', '첫줄', '2026201999', 'seed') as r`)).story_id;
+  await pool.query('update app.stories set max_lines = 2 where id = $1', [fin]);
+  await p.waitForTimeout(25000);                       // the list learns about the new story
+  await add(fin, '둘. 끝.');
+  await p.locator('.firework').first().waitFor({ state: 'attached', timeout: 30000 });
+  await p.screenshot({ path: `${SHOTS}/42-fireworks.png` });
+  await pool.query(`update app.settings set extras = extras || '{"deadline": "2026-11-23T00:00:00+09:00"}'::jsonb`);
+});
+
 // Last on purpose: it wipes the database.
 await step('관리 · 초기화: one counter, then everything (with a backup download first)', async () => {
   await finishedStory('지워질 이야기');

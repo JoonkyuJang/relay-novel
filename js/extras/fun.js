@@ -67,8 +67,9 @@ export function initFun(app, wm, { cat, clockEl }) {
   bus.on('memo-word', ({ word }) => { if (/독수리/.test(word)) eagle(); });
 
   // ---------------------------------------------------------- 휴지통 와르르
-  bus.on('trash-dblclick', ({ el }) => {
-    if (!fun('fun_trash')) return;
+  bus.on('trash-dblclick', ({ el }) => { if (fun('fun_trash')) spill(el); });
+  bus.on('trash-knock', ({ el }) => spill(el));                  // the cat did it
+  function spill(el) {
     play('paper');
     el.classList.remove('tipping'); void el.offsetWidth; el.classList.add('tipping', 'spilling');
     const r = el.querySelector('svg').getBoundingClientRect();
@@ -87,7 +88,7 @@ export function initFun(app, wm, { cat, clockEl }) {
     }
     setTimeout(() => el.classList.remove('tipping'), 1600);
     setTimeout(() => el.classList.remove('spilling'), 1400);      // …and somehow it's full again
-  });
+  }
 
   // ---------------------------------------------------------- 시계 열 번: 원고지 시간
   let clicks = [];

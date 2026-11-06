@@ -2,10 +2,11 @@
 // 오늘의 첫 문장, 이 컴퓨터에 관하여.
 import * as api from '../api.js';
 import { h, icon } from '../ui.js';
-import { on, fun, X, bus, kst, WEEKDAY, manuscript } from './extras.js';
+import { on, fun, X, bus, kst, WEEKDAY, manuscript, deadlineHour } from './extras.js';
 import { soundOn, setSound, play } from './sound.js';
 import { isPhone } from '../wm.js';
 import { binSvg, trashBadge, tipContent, hoverTip, initPhoneBin, refreshTrashCount } from './bin.js';
+import { giftArt, myGifts, GIFT_NAMES } from './cat.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 function pixel(path, size = 14, vb = 14) {
@@ -18,6 +19,7 @@ function pixel(path, size = 14, vb = 14) {
 export const ICONS = {
   speakerOn: '<path d="M1 5h3l4-3v10l-4-3H1z" fill="currentColor"/><path d="M10 4.5c1 1 1 4 0 5M11.5 3c2 2 2 6 0 8" fill="none" stroke="currentColor"/>',
   speakerOff: '<path d="M1 5h3l4-3v10l-4-3H1z" fill="currentColor"/><path d="M10 5l3 4M13 5l-3 4" stroke="#D9774F" stroke-width="1.5"/>',
+  recap: '<path data-fill d="M2.5 1.5h11v13h-11z" fill="#FFF9EF" stroke="currentColor"/><path d="M8 3h1v2h2v1h-1v1h1v2H9V8H7v1H5V7h1V6H5V5h2V3z" fill="#D9774F"/><path d="M4.5 11.5h7M4.5 13h5" stroke="currentColor"/>',
   memo: '<path data-fill d="M2.5 1.5h11v13h-11z" fill="#FFF3B8" stroke="currentColor"/><path d="M4 4.5h8M4 7.5h8M4 10.5h5" stroke="currentColor"/>',
 };
 
@@ -50,6 +52,7 @@ export function deadlineEl() {
     if (p.left === 0) el.textContent = '마감됐어요';
     else if (isPhone()) el.textContent = p.d ? `마감 D-${p.d}` : '마감 D-day';
     else el.textContent = `마감까지 ${p.d ? `${p.d}일 ` : ''}${p2(p.hh)}:${p2(p.mm)}:${p2(p.ss)}`;
+    el.classList.toggle('final-hour', on('deadline_fireworks') && deadlineHour());   // the last hour: it blinks
   };
   draw();
   setInterval(draw, 1000);
@@ -121,7 +124,10 @@ export function aboutView(app) {
         on('stamps') ? row('찍힌 도장', a ? `${a.stamps.toLocaleString('ko-KR')}개` : '—') : null,
         row('가동 시간', since ? `${Math.floor(up / 86400e3)}일 ${Math.floor(up / 3600e3) % 24}시간` : '—'),
         on('cat') ? row('고양이', a ? `${X('cat_name')} 1마리 · 쓰다듬은 횟수 ${Number(a.cat_pets).toLocaleString('ko-KR')}` : X('cat_name')) : null,
-        on('trash') ? row('휴지통', a ? `안 쓰고 놓은 바통 ${a.trash}번` : '—') : null),
+        on('trash') ? row('휴지통', a ? `안 쓰고 놓은 바통 ${a.trash}번` : '—') : null,
+        on('coffee_rings') ? row('커피 자국', `${document.querySelectorAll('.ring-layer .ring').length}개 (늦은 밤에 쓴 줄마다)`) : null,
+        on('cat_gifts') && Object.keys(myGifts()).length ? row('선물함', h('span', { class: 'gift-shelf' },
+          Object.entries(myGifts()).map(([k, n]) => h('span', { class: 'gift-item', title: GIFT_NAMES[k] ?? k }, giftArt(k, 16), h('span', {}, `×${n}`))))) : null),
       h('div', { class: 'about-disk' }, h('span', { style: `width:${pct}%` })),
       h('div', { class: 'about-legend faint' }, h('span', {}, `■ 쓴 원고지 ${sheets}매 (${pct}%)`), h('span', {}, `□ 남은 ${Math.max(0, 1000 - sheets).toFixed(0)}매`)),
       h('p', { class: 'faint about-credits' },
@@ -132,7 +138,7 @@ export function aboutView(app) {
   }
   return {
     type: 'about', route: '/about', title: '이 컴퓨터에 관하여', body, remember: false, resizable: false,
-    size: { w: 380, h: 456 }, position: 'center', minimizable: false,
+    size: { w: 380, h: 500 }, position: 'center', minimizable: false,
     mount: render,
   };
 }
@@ -160,6 +166,14 @@ export function firstSentence(stories) {
   return { text: s.first_line, src: `「${s.title || '제목 없는 이야기'}」 첫 줄`, date: `${m}.${String(d).padStart(2, '0')}`, id: s.id };
 }
 
+// ---------------------------------------------------------------- 바탕 무늬 (this device)
+
+const PATTERNS = ['dots', 'grid', 'ginkgo', 'plain'];
+const PATTERN_NAMES = { dots: '점', grid: '원고지', ginkgo: '은행잎', plain: '무늬 없음' };
+const pattern = () => (on('desk_patterns') && PATTERNS.includes(api.prefs.get('pattern')) ? api.prefs.get('pattern') : 'dots');
+function applyPattern() { for (const p of PATTERNS) document.body.classList.toggle(`pattern-${p}`, p === pattern() && p !== 'dots'); }
+function setPattern(p) { api.prefs.set('pattern', p === 'dots' ? null : p); applyPattern(); }
+
 // ---------------------------------------------------------------- the desktop itself
 
 export function initDesk(app, wm, { desktop, iconsNav }) {
@@ -174,8 +188,10 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
 
   const sticky = h('aside', { class: 'sticky', hidden: true, 'aria-label': '오늘의 첫 문장' });
 
+  const recapIcon = h('a', { class: 'icon extra', href: '#/recap' }, pixel(ICONS.recap, 40, 16), h('span', {}, '2026 가을 결산'));
   function placeIcons() {
     iconsNav.querySelectorAll('.extra').forEach(e => e.remove());
+    if (app.recapOpen?.()) iconsNav.append(recapIcon);
     if (on('memo')) iconsNav.append(memoIcon);
     if (on('trash')) iconsNav.append(trashIcon);
   }
@@ -224,6 +240,7 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
       ['화면 보호기 지금 켜기', () => bus.emit('saver-now', {})],
       [saverOff ? '이 기기에서 화면 보호기 켜기' : '이 기기에서 화면 보호기 끄기', () => api.prefs.set('saver', saverOff ? null : '0')],
       on('sound') ? [soundOn() ? '소리 끄기' : '소리 켜기', () => { setSound(!soundOn()); app.refreshMenubar?.(); }] : null,
+      on('desk_patterns') ? ['바탕 무늬 바꾸기', () => { setPattern(PATTERNS[(PATTERNS.indexOf(pattern()) + 1) % PATTERNS.length]); }, PATTERN_NAMES[pattern()]] : null,
       on('daynight') && on('daynight_override') ? ['낮 · 밤 바꾸기', () => document.querySelector('.phase-ico')?.click(), { auto: '자동', day: '늘 낮', night: '늘 밤' }[api.prefs.get('daynight', 'auto')]] : null,
       '-',
       on('about') ? ['이 컴퓨터에 관하여…', () => app.go('/about')] : null,
@@ -243,8 +260,18 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
     ].filter(Boolean);
     void id;
   }
+  function titleItems(win) {
+    const key = win.dataset.key, w = wm.get(key);
+    return [
+      [wm.isShaded(key) ? '펼치기' : '말아 올리기', () => wm.shade(key)],
+      on('minimize') && w?.view.minimizable !== false && w?.view.closable !== false ? ['접어 두기', () => wm.minimize(key)] : null,
+      w?.view.closable !== false ? ['닫기', () => wm.close(key)] : null,
+    ].filter(Boolean);
+  }
   desktop.addEventListener('contextmenu', (e) => {
     if (!on('context_menu')) return;
+    const title = e.target.closest('.win-title');
+    if (title && on('window_shade') && !isPhone() && !e.target.closest('button')) { e.preventDefault(); openMenu(e.clientX, e.clientY, titleItems(title.closest('.win'))); return; }
     const li = e.target.closest('.line[data-id]');
     if (li) { e.preventDefault(); openMenu(e.clientX, e.clientY, lineItems(li)); return; }
     if (e.target.closest('.win, input, textarea, a, button')) return;
@@ -261,7 +288,10 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
   }, { passive: true });
   for (const ev of ['touchend', 'touchmove', 'touchcancel']) desktop.addEventListener(ev, () => { clearTimeout(press); press = null; }, { passive: true });
 
-  const refreshAll = () => { placeIcons(); refreshTrash(); refreshSticky(); };
+  const refreshAll = () => { placeIcons(); refreshTrash(); refreshSticky(); applyPattern(); };
+  // the 결산 icon appears by itself when the deadline passes with the page open
+  const untilEnd = Date.parse(X('deadline')) - Date.now();
+  if (untilEnd > 0 && untilEnd < 2 ** 31 - 1) setTimeout(() => { placeIcons(); bus.emit('settings', {}); }, untilEnd + 1000);
   bus.on('settings', refreshAll);
   api.watch(['list'], () => { refreshTrash(); });
   refreshAll();

@@ -195,6 +195,8 @@ export const petCat = () => call('pet_cat');
 export const storyCards = () => call('story_cards');
 export const getAbout = () => call('get_about');
 export const getCounters = () => call('get_counters');
+export const nightRings = () => call('night_rings');
+export const seasonRecap = () => call('season_recap');
 // 내가 쓴 줄: every line written as this 이름 + 학번 (any device)
 export const myLines = ({ name, studentId }) => call('my_lines', { p_student_id: studentId, p_name: name });
 // Crash report (fire and forget; never throws)
@@ -244,6 +246,8 @@ const POLL_MS = 20000;                    // version check (one tiny request)
 const SWEEP_MS = 120000;                  // full refresh, for time-based changes (expired batons)
 const versions = new Map();               // signal key -> last seen version
 const seenEmpty = new Set();              // watched keys the server had no row for
+let bgWatch = false;                      // keep the tiny version check going in a background tab
+export const watchInBackground = (v) => { bgWatch = !!v; };
 
 function notify(sub, jitter = 0) {
   clearTimeout(sub.t);
@@ -293,7 +297,7 @@ function ensureChannel() {
   // full sweep; on returning to the tab, check right away.
   let n = 0;
   setInterval(() => {
-    if (document.hidden) return;
+    if (document.hidden && !bgWatch) return;
     n++;
     // the full sweep only while someone is around (a tab left open overnight keeps just the tiny version check)
     if (n % (SWEEP_MS / POLL_MS) === 0) { if (Date.now() - lastSeen < 15 * 60e3) subscribers.forEach(s => notify(s, 3000)); return; }

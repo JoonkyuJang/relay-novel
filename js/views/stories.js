@@ -18,7 +18,8 @@ export function storiesView(app) {
   const rows = h('div', { class: 'win-scroll' });
   const foot = h('div', { class: 'win-foot' },
     h('div', { class: 'actions', style: 'justify-content:space-between;align-items:center' },
-      h('a', { href: '#/guestbook', class: 'btn-link' }, '방명록 ▸'),
+      h('span', { style: 'display:flex;gap:14px' }, h('a', { href: '#/guestbook', class: 'btn-link' }, '방명록 ▸'),
+        app.recapOpen?.() ? h('a', { href: '#/recap', class: 'btn-link recap-link' }, '2026 가을 결산 ▸') : null),
       h('a', { href: '#/new', class: 'btn btn-primary' }, '새 이야기 시작')));
   const body = document.createDocumentFragment();
   body.append(bar, head, rows, foot);

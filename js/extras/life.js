@@ -136,8 +136,10 @@ export function initTicker() {
     }, Math.round(ms * 0.45) + 3200);
   }
 
+  // (completions anywhere are also announced on the bus — the last day's fireworks listen for them)
+  const wanted = () => api.hasEntered() && (on('ticker') || on('deadline_fireworks'));
   api.onStories((list) => {
-    if (!on('ticker') || !api.hasEntered()) { prev = null; return; }
+    if (!wanted()) { prev = null; return; }
     const next = new Map(list.map(s => [s.id, { line_count: s.line_count, status: s.status }]));
     if (prev) {
       for (const s of list) {
@@ -145,6 +147,8 @@ export function initTicker() {
         const name = `「${s.title || s.first_line || '제목 없는 이야기'}」`;
         const href = `#/story/${s.id}`;
         const self = Date.now() - (mine.get(s.id) ?? 0) < 60e3;
+        if (was && s.status === 'completed' && was.status !== 'completed') bus.emit('any-completed', { storyId: s.id });
+        if (!on('ticker')) continue;
         if (!was) { if (!self) queue.push({ text: `새 이야기 · ${name}`, href }); continue; }
         if (s.line_count > was.line_count && !self) {
           queue.push(s.status === 'completed' && was.status !== 'completed'
@@ -159,7 +163,7 @@ export function initTicker() {
     prev = next;
   });
   // keep hearing about the list even when the 서랍 is closed
-  const refresh = () => { if (on('ticker') && api.hasEntered() && !isPhone()) api.listStories().catch(() => {}); };
+  const refresh = () => { if (wanted() && !isPhone()) api.listStories().catch(() => {}); };
   api.watch(['list'], refresh);
   setTimeout(refresh, 1500);
 }
@@ -195,4 +199,36 @@ export function initUpdateCheck() {
   setInterval(check, 10 * 60e3);
   document.addEventListener('visibilitychange', check);
   return { check: () => { lastCheck = 0; return check(); } };
+}
+
+// ------------------------------------------------------------ the tab icon
+
+// In another tab, a story you have open here gets a writer: the tab's icon turns into the cat, blinking.
+const CAT_ROWS = (eyes) => [
+  '................', '..#.........#...', '..##.......##...', '..#w#.....#w#...', '.#wwW#####Www#..', '.#wwwwwwwwwww#..',
+  '.#wwwwwwwwwww#..', eyes, '.#wwwwwwwwwww#..', '.#wwwwwppwwww#..', '.#wwwww##wwww#..', '.#wwwwwwwwwww#..',
+  '..#wwwwwwwww#...', '...#########....', '................', '................',
+];
+function catIcon(eyes) {
+  let ink = '', fill = '', pink = '';
+  CAT_ROWS(eyes).forEach((r, y) => [...r].forEach((c, x) => {
+    const px = `M${x} ${y}h1v1h-1z`;
+    if (c === '#') ink += px; else if (c === 'w' || c === 'W') fill += px; else if (c === 'p') pink += px;
+  }));
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='${fill}' fill='#FFF9EF'/><path d='${pink}' fill='#E58AA6'/><path d='${ink}' fill='#1D2A44'/></svg>`;
+  return `data:image/svg+xml,${svg.replace(/#/g, '%23').replace(/</g, '%3C').replace(/>/g, '%3E')}`;
+}
+export function initTabIcon(wm) {
+  const link = document.querySelector('link[rel="icon"]');
+  if (!link) return;
+  const plain = link.href;
+  const frames = [catIcon('.#ww#wwwww#ww#..'), catIcon('.#wwwwwwwwwww#..')];          // eyes open · a blink
+  let i = 0, showing = false;
+  setInterval(() => {
+    const stories = wm.wins().filter(w => w.view.type === 'story');
+    api.watchInBackground(on('tab_icon') && stories.length > 0);
+    const someone = on('tab_icon') && document.hidden && stories.some(w => w.view.storyData?.status === 'open' && w.view.storyData?.writing);
+    if (someone) { link.href = frames[i++ % 2]; showing = true; }
+    else if (showing) { link.href = plain; showing = false; }
+  }, 800);
 }

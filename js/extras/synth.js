@@ -315,6 +315,23 @@ export function makeSynth(ac, { volume = 0.55 } = {}) {
       chip(t, { base: 165, pitch: [0, -5], vol: [0.8, 0.3], wave: 'tri', peak: 0.1 });
       chip(t + 0.32, { base: B, pitch: [7], vol: [0.4, 0.15], duty: 0.125, peak: 0.04 });
     },
+    // a 방명록 note folds into a paper airplane and swooshes off
+    plane(t) {
+      noise(t, { rate: [3000, 3000], vol: [0.5, 0.3], short: true, peak: 0.05, frame: FR / 2 });
+      noise(t + 0.05, { rate: [2500, 4000, 7000, 11000, 15000, 12000, 8000], vol: [0.15, 0.35, 0.55, 0.6, 0.5, 0.3, 0.12], peak: 0.07, frame: FR * 1.6, lp: 9000 });
+      chip(t + 0.05, { base: B, pitch: [0, 2, 4, 7, 9, 12, 14, 16], vol: [0.3, 0.4, 0.45, 0.45, 0.4, 0.3, 0.2, 0.1], duty: 0.125, peak: 0.04, frame: FR * 1.4 });
+    },
+    // a firework over 학생회관: a rising whistle, a pop, then crackles
+    firework(t) {
+      chip(t, { base: B, pitch: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18], vol: [0.2, 0.3, 0.3, 0.35, 0.35, 0.35, 0.3, 0.3, 0.25, 0.2], duty: 0.125, peak: 0.04 });
+      noise(t + 0.18, { rate: [6000, 3000, 1500, 900], vol: [1, 0.6, 0.3, 0.1], peak: 0.14 });
+      for (let i = 0; i < 6; i++) noise(t + 0.3 + i * 0.06 + (i % 2) * 0.02, { rate: 24000 - i * 2000, vol: [0.7, 0.2], short: true, peak: 0.05, frame: FR / 3 });
+    },
+    // re-inking a stamp: two soft dabs on the pad
+    dab(t) {
+      noise(t, { rate: [2500, 1500], vol: [0.8, 0.3], peak: 0.1 });
+      noise(t + 0.16, { rate: [2500, 1500], vol: [0.8, 0.3], peak: 0.1 });
+    },
     // someone else's line finishes typing in: a small carriage return (ratchet + soft stop)
     ret(t) {
       let tt = t;

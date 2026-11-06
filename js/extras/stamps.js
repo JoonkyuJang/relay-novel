@@ -55,6 +55,12 @@ export function fillPad(pad, marks = []) {
   else { pad.removeAttribute('role'); pad.removeAttribute('aria-label'); }
 }
 
+// 인주: stamping in quick succession uses up the ink (each new mark lands fainter); when it's nearly dry,
+// the next press first dabs the stamp on the pad (two soft taps) and it's dark again. Ink comes back
+// by itself after a short rest. Only the moment of stamping looks faint: marks are drawn normally after.
+let ink = 1, inkAt = Date.now();
+const inkNow = () => Math.min(1, ink + (Date.now() - inkAt) / 20000);
+
 // The stamp row inside a line's 속성 window. state: { counts, mine } (mutated on toggle).
 export function stampButtons(app, line, state, { onChange } = {}) {
   const ident = app.identity();
@@ -77,15 +83,33 @@ export function stampButtons(app, line, state, { onChange } = {}) {
     if (busy) return;
     busy = true;
     try {
+      // nearly dry: re-ink first (the stamp dips onto the pad twice)
+      if (on('stamp_ink') && !state.mine.includes(kind) && inkNow() < 0.3) {
+        const svg = btn.querySelector('svg');
+        btn.classList.add('re-ink');
+        play('dab');
+        msg.textContent = '인주를 묻히는 중…';
+        await new Promise(r => setTimeout(r, 520));
+        btn.classList.remove('re-ink');
+        msg.textContent = '';
+        ink = 1; inkAt = Date.now();
+        void svg;
+      }
       const r = await api.toggleStamp(line.id, kind, ident);
       state.counts = r.counts;
       state.mine = r.stamped ? [...state.mine, kind] : state.mine.filter(k => k !== kind);
       draw();
       play(r.stamped ? 'stamp' : 'unstamp');
       if (r.stamped) {
-        row.querySelector(`.stamp-btn:nth-child(${KINDS.indexOf(kind) + 1}) svg`)?.classList.add('thunk');
+        const mark = row.querySelector(`.stamp-btn:nth-child(${KINDS.indexOf(kind) + 1}) svg`);
+        mark?.classList.add('thunk');
+        if (on('stamp_ink')) {
+          const now = inkNow();
+          mark?.style.setProperty('--ink', (0.35 + 0.65 * now).toFixed(2));  // this mark lands as dark as the ink allows
+          ink = Math.max(0, now - 0.26); inkAt = Date.now();
+        }
       }
-      msg.textContent = '';
+      msg.textContent = on('stamp_ink') && r.stamped && ink < 0.3 ? '인주가 거의 말랐어요. 다음엔 다시 묻혀서 찍어요.' : '';
       onChange?.();
     } catch (e) { msg.textContent = errorText(e); dispatchEvent(new CustomEvent('rn-refuse', { detail: row })); }
     finally { busy = false; }

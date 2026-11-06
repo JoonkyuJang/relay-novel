@@ -32,6 +32,8 @@ export const DEFAULTS = {
   type_in_lines: true, milestones: true, ticker: true, cat_typing: true, cat_seal_nap: true,
   skyline: true, seasons: true, snow_from: '2026-12-01T00:00:00+09:00',
   trash_toss: true, trash_phone: true,
+  coffee_rings: true, cat_mischief: true, cat_gifts: true, guestbook_plane: true, stamp_ink: true,
+  stamp_card: true, recap: true, deadline_fireworks: true, desk_patterns: true, window_shade: true, tab_icon: true,
 };
 
 let current = { ...DEFAULTS };
@@ -76,3 +78,13 @@ export const deadlinePassed = (now = Date.now()) =>
 
 // 첫눈: after the admin's date (KST), the leaves give way to snow.
 export const winter = (now = Date.now()) => !Number.isNaN(Date.parse(current.snow_from)) && now >= Date.parse(current.snow_from);
+
+// The last day before the deadline (Seoul date of the deadline's final minute), and its last hour.
+export function deadlineDay(now = Date.now()) {
+  const end = Date.parse(current.deadline);
+  if (!current.deadline_on || Number.isNaN(end) || now >= end) return false;
+  const a = kst(new Date(end - 1)), b = kst(new Date(now));
+  return a.y === b.y && a.m === b.m && a.d === b.d;
+}
+export const deadlineHour = (now = Date.now()) => { const end = Date.parse(current.deadline); return !!current.deadline_on && end - now > 0 && end - now <= 3600e3; };
+export const deadlineOver = (now = Date.now()) => { const end = Date.parse(current.deadline); return !Number.isNaN(end) && now >= end; };

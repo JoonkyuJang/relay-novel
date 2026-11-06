@@ -26,7 +26,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     if (win.view.remember === false || isPhone()) return;
     const el = win.el;
     prefs.setJSON(`win.${win.view.type}`, {
-      x: parseInt(el.style.left), y: parseInt(el.style.top), w: el.offsetWidth, h: el.offsetHeight });
+      x: parseInt(el.style.left), y: parseInt(el.style.top), w: el.offsetWidth, h: win.shaded ? (parseInt(win.shadeH) || el.offsetHeight) : el.offsetHeight });
   }
 
   function clamp(el) {
@@ -209,6 +209,25 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     clamp(win.el);
     if (from?.width) moment('restore', { from, to: win.el });
   }
+  // 말아 올리기 (window shade): roll a window up to its title bar, or back down.
+  function shade(key) {
+    const win = wins.get(key);
+    if (!win || isPhone()) return;
+    const el = win.el;
+    if (win.shaded) {
+      win.shaded = false;
+      el.classList.remove('shaded');
+      el.style.height = win.shadeH;
+      sound('restore');
+    } else {
+      win.shaded = true;
+      win.shadeH = el.style.height;
+      el.classList.add('shaded');
+      el.style.height = 'auto';
+      sound('minimize');
+    }
+    clamp(el);
+  }
   // 창 정리하기: cascade every visible window from the top-left.
   function tidy() {
     const list = [...wins.values()].filter(w => !w.minimized).sort((a, b) => (+a.el.style.zIndex) - (+b.el.style.zIndex));
@@ -241,7 +260,8 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
   window.addEventListener('resize', () => { for (const w of wins.values()) clamp(w.el); });
 
   return {
-    open, close, focus, minimize, restore, tidy,
+    open, close, focus, minimize, restore, tidy, shade,
+    isShaded: (key) => !!wins.get(key)?.shaded,
     minimizeAll: () => { for (const k of [...wins.keys()]) minimize(k); },
     has: (key) => wins.has(key),
     get: (key) => wins.get(key),

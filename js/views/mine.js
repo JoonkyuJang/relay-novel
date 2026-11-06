@@ -2,8 +2,41 @@
 // with the stamps each line got. Opened from my name in the menu bar.
 import * as api from '../api.js';
 import { h, errorText } from '../ui.js';
-import { on, manuscript } from '../extras/extras.js';
+import { on, manuscript, kst } from '../extras/extras.js';
+import { play } from '../extras/sound.js';
 import { stampSvg, KINDS, NAMES } from '../extras/stamps.js';
+
+// 도장 수첩: small achievements worked out from my own lines (nothing new is stored on the server)
+const BADGES = [
+  ['first',  '첫',  '첫 줄',       '아무 이야기에나 첫 줄을 이어 쓰면', (L) => L.length > 0],
+  ['opener', '문',  '첫 문장',     '새 이야기를 시작하면', (L) => L.some(l => l.position === 1)],
+  ['closer', '끝',  '마지막 줄',   '이야기의 마지막 줄을 쓰면', (L) => L.some(l => l.last)],
+  ['full',   '꽉',  '꽉 채운 줄',  '글자 수를 딱 맞춰 꽉 채우면', (L) => L.some(l => l.full)],
+  ['owl',    '밤',  '올빼미',      '밤 12시부터 새벽 6시 사이에 쓰면', (L) => L.some(l => kst(new Date(l.created_at)).h < 6)],
+  ['early',  '해',  '아침 글쓴이', '아침 6시부터 9시 사이에 쓰면', (L) => L.some(l => { const hr = kst(new Date(l.created_at)).h; return hr >= 6 && hr < 9; })],
+  ['five',   '다섯', '다섯 이야기', '서로 다른 이야기 다섯 편에 쓰면', (L) => new Set(L.map(l => l.story_id)).size >= 5],
+  ['ten',    '열',  '열 줄',       '줄을 열 개 쓰면', (L) => L.length >= 10],
+  ['done',   '완',  '완결 동료',   '내가 쓴 이야기가 완결되면', (L) => L.some(l => l.status === 'completed')],
+  ['rich',   '부',  '도장 부자',   '받은 도장이 모두 10개가 되면', (L) => L.reduce((n, l) => n + KINDS.reduce((m, k) => m + (l.stamps?.[k] ?? 0), 0), 0) >= 10],
+  ['triple', '셋',  '세 가지 도장', '한 줄에 도장 세 가지를 다 받으면', (L) => L.some(l => KINDS.every(k => (l.stamps?.[k] ?? 0) > 0))],
+  ['hit',    '인',  '인기 줄',     '한 줄에 도장을 다섯 개 받으면', (L) => L.some(l => KINDS.reduce((m, k) => m + (l.stamps?.[k] ?? 0), 0) >= 5)],
+];
+function stampCard(rows) {
+  const seen = new Set(api.prefs.getJSON('badgesSeen') ?? []);
+  const got = BADGES.filter(b => b[4](rows)).map(b => b[0]);
+  const fresh = got.filter(id => !seen.has(id));
+  api.prefs.setJSON('badgesSeen', [...new Set([...seen, ...got])]);
+  if (fresh.length) setTimeout(() => play('stamp'), 300);
+  return h('section', { class: 'stamp-card', 'aria-label': `도장 수첩 ${got.length} / ${BADGES.length}` },
+    h('h3', {}, '도장 수첩', h('span', { class: 'muted' }, ` ${got.length} / ${BADGES.length}`)),
+    h('ul', {}, BADGES.map(([id, glyph, name, how]) => {
+      const has = got.includes(id);
+      return h('li', { class: `badge-cell${has ? ' got' : ''}${fresh.includes(id) ? ' fresh' : ''}`, title: has ? `${name} — ${how}` : `아직: ${how}` },
+        h('span', { class: 'badge-seal', 'aria-hidden': 'true' }, has ? glyph : '?'),
+        h('span', { class: 'badge-name' }, name),
+        h('span', { class: 'sr-only' }, has ? '받았어요' : `아직 · ${how}`));
+    })));
+}
 
 export function mineView(app) {
   let unwatch = null;
@@ -34,10 +67,10 @@ export function mineView(app) {
         h('span', {}, `${ident.name} 님`),
         h('span', { class: 'muted' }, `줄 ${rows.length}개 · 이야기 ${stories.size}편 · ${on('manuscript') ? `원고지 ${manuscript(chars)}매` : `${chars}자`}${on('stamps') ? ` · 받은 도장 ${got}개` : ''}`));
       if (!rows.length) {
-        scroll.replaceChildren(h('div', { class: 'empty' }, '아직 쓴 줄이 없어요. 이야기 서랍에서 이어 써 보세요.'));
+        scroll.replaceChildren(on('stamp_card') ? stampCard(rows) : '', h('div', { class: 'empty' }, '아직 쓴 줄이 없어요. 이야기 서랍에서 이어 써 보세요.'));
         return;
       }
-      scroll.replaceChildren(...[...stories.values()].map(s => h('section', { class: 'mine-story' },
+      scroll.replaceChildren(on('stamp_card') ? stampCard(rows) : '', ...[...stories.values()].map(s => h('section', { class: 'mine-story' },
         h('h3', {}, h('a', { href: `#/story/${s.story_id}` }, s.title || '제목 없는 이야기'),
           h('span', { class: `chip ${s.status === 'completed' ? 'grass' : 'sky'}` }, s.status === 'completed' ? '완결' : '진행 중')),
         h('ol', { class: 'mine-lines' }, s.lines.sort((a, b) => a.position - b.position).map(l => h('li', {},

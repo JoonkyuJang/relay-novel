@@ -39,6 +39,9 @@ export function helpView(app) {
           : null),
       helpSection(),
       on('cat') ? h('p', { style: 'margin:14px 0 0;line-height:18px' }, `바탕화면의 고양이 이름은 ${yeyo(X('cat_name'))}. 쓰다듬어 주세요.`) : null,
+      on('trash') || on('coffee_rings') ? h('ul', { class: 'help-desk' },
+        on('trash') ? h('li', {}, h('b', {}, '휴지통'), " — '이어 쓰기'로 줄을 맡았다가 올리지 않고 놓은 횟수예요. 많아질수록 넘쳐요.") : null,
+        on('coffee_rings') ? h('li', {}, h('b', {}, '커피 자국'), ' — 밤 12시부터 새벽 6시 사이에 쓰인 줄마다 바탕화면에 하나씩 남아요. 오래된 자국은 조금씩 옅어져요.') : null) : null,
       h('p', { class: 'muted', style: 'margin:14px 0 0' }, '화면 효과는 메뉴의 CRT 버튼으로, 소리는 스피커 버튼으로 켜고 끌 수 있어요.'));
   }
 

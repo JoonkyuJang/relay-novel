@@ -5,7 +5,8 @@
 
 import { h } from '../ui.js';
 import { isPhone } from '../wm.js';
-import { on, bus, kst, winter, reduceMotion } from './extras.js';
+import { on, bus, kst, winter, reduceMotion, X, deadlineDay } from './extras.js';
+import { play } from './sound.js';
 
 const W = 640, H = 110, GY = 100;          // grid size; plaza starts at GY
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -310,8 +311,37 @@ export function initSkyline(sky, currentPhase) {
       for (let i = 0; i < n; i++) drift(Math.random() < 0.65 ? 'ginkgo' : 'maple', { x: Math.random() * w * 0.9, delay: i * 700 + Math.random() * 900, dur: 8000 + Math.random() * 4000 });
     }
   }
+  // ---- the last day: a firework over 학생회관 for every story completed anywhere, and a finale at the deadline
+  const COLORS = ['#FFF9EF', '#E9A04A', '#E58AA6', '#D9774F', '#F3D58A', '#9EC5E8'];
+  function burst(count = 1) {
+    if (reduceMotion() || isPhone() || document.hidden || document.body.classList.contains('amber')) return;
+    const w = sky.clientWidth, ht = sky.clientHeight;
+    for (let k = 0; k < count; k++) {
+      setTimeout(() => {
+        const x = w * (0.3 + Math.random() * 0.4), y = ht * (0.12 + Math.random() * 0.3), color = COLORS[Math.floor(Math.random() * COLORS.length)];
+        const fw = h('div', { class: 'firework', style: `left:${Math.round(x)}px;top:${Math.round(y)}px;--c:${color};--rise:${Math.round(ht * 0.72 - y)}px` });
+        const N = 14 + Math.floor(Math.random() * 8);
+        for (let i = 0; i < N; i++) {
+          const a = (i / N) * Math.PI * 2, r = 46 + Math.random() * 26;
+          fw.append(h('i', { style: `--dx:${Math.round(Math.cos(a) * r)}px;--dy:${Math.round(Math.sin(a) * r)}px` }));
+        }
+        fall.append(fw);
+        play('firework');
+        setTimeout(() => fw.remove(), 2200);
+      }, k * 520 + Math.random() * 200);
+    }
+  }
+  const lastDayBurst = () => { if (on('deadline_fireworks') && deadlineDay()) burst(3); };
+  bus.on('any-completed', lastDayBurst);
+  bus.on('story-completed', lastDayBurst);
+  function scheduleFinale() {
+    const left = Date.parse(X('deadline')) - Date.now();
+    if (left > 0 && left < 24 * 3600e3) setTimeout(() => { if (on('deadline_fireworks')) burst(12); }, left);
+  }
+  scheduleFinale();
+
   const next = () => setTimeout(() => { gust(); next(); }, 150e3 + Math.random() * 150e3);
   setTimeout(gust, 20e3);
   next();
-  return { gust };
+  return { gust, burst };
 }
