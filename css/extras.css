@@ -513,3 +513,9 @@ body.phase-night .ticker-text { background: #111A2E; }
 @media (max-width: 767px) { .doze-note { bottom: calc(76px + env(safe-area-inset-bottom)); white-space: normal; width: calc(100% - 32px); } }
 .update-note { bottom: auto; top: calc(var(--menubar-h) + 12px); }
 @media (max-width: 767px) { .update-note { bottom: auto; top: calc(var(--menubar-h) + 12px); } }
+
+/* hover box beside a desktop icon (휴지통) */
+.hover-tip { position: fixed; z-index: 2300; width: 230px; word-break: keep-all; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--paper); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); font-size: 11px; line-height: 16px; pointer-events: none; }
+.hover-tip::after { content: ""; position: absolute; top: calc(50% - 5px); right: -7px; width: 8px; height: 8px; background: var(--paper); border-right: 2px solid var(--ink); border-top: 2px solid var(--ink); transform: rotate(45deg); }
+.hover-tip.right::after { right: auto; left: -7px; transform: rotate(-135deg); }
+.hover-tip b { font-size: 12px; }

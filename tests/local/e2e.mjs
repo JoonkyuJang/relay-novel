@@ -1022,6 +1022,12 @@ await step('little touches: 학생회관, zoom outlines, "no" shake, type-in lin
   assert.ok(Number(await p.locator('.desk-skyline').getAttribute('data-lit')) >= 1, 'the club room is lit at night');
   const cls = await p.evaluate(() => document.body.className);
   for (const c of ['fx-press', 'fx-cursor', 'season-autumn', 'phase-night']) assert.ok(cls.includes(c), `${c} in ${cls}`);
+  // 휴지통 explains its number in a hover box
+  await p.hover('.icon.trash');
+  await p.locator('.hover-tip >> text=한 글자도 올리지 않고 놓은 횟수').waitFor();
+  await p.screenshot({ path: `${SHOTS}/31-trash-tip.png` });
+  await p.mouse.move(600, 400);
+  await p.locator('.hover-tip').waitFor({ state: 'detached' });
   // a window zooms out of its icon
   await p.click('.icon[data-route="/guestbook"]');
   await p.locator('.zoom-rect').first().waitFor({ state: 'attached', timeout: 1000 });
