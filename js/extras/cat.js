@@ -8,6 +8,7 @@ import { SPRITES } from './cat-sprites.js';
 import { on, X, fun, bus, reduceMotion } from './extras.js';
 import { play, voice, soundOn } from './sound.js';
 import { currentPhase } from './daynight.js';
+import { getTrashCount, pullBallOut } from './bin.js';
 
 export const PALETTES = {
   day:   { o: '#1D2A44', e: '#1D2A44', w: '#FFFBF4', c: '#D9774F', k: '#6B7591', p: '#E58AA6' },
@@ -118,7 +119,55 @@ export function initCat(app, wm, desktop) {
     else if (on('cat_wander') && r < 0.64 && wins.length) napOn(wins[Math.floor(Math.random() * wins.length)]);
     else if (on('cat_seal_nap') && r < 0.76 && sealSpot()) napOnSeal();
     else if (on('cat_belly') && r < 0.84) belly();
+    else if (on('cat_wander') && on('trash') && r < 0.88 && getTrashCount() > 0 && document.querySelector('#icons .icon.trash')?.offsetParent) digTrash();
     else sit();
+  }
+
+  // 휴지통 뒤지기: walk to the bin, fish a paper ball out and bat it along the floor a few times
+  function digTrash() {
+    const bin = document.querySelector('#icons .icon.trash svg');
+    if (!bin) { sit(); return; }
+    const d = desktop.getBoundingClientRect(), br = bin.getBoundingClientRect();
+    const tx = Math.min(desktop.clientWidth - 40, Math.max(60, br.left - d.left + br.width / 2 - 30));
+    walkTo(tx, { then: () => {
+      clearTimers(); state = 'busy';
+      flip = false; img.style.transform = '';
+      setFrame('reach'); el.classList.add('reaching');
+      later(() => {
+        el.classList.remove('reaching');
+        const m = pullBallOut();
+        if (!m) { sit(); return; }
+        const ball = h('i', { class: 'floor-ball', 'aria-hidden': 'true' });
+        layer.append(ball);
+        setTimeout(() => ball.remove(), 14000);                   // (whatever happens to the cat)
+        const fy = floorY() - 15;
+        let bx = x - 34;
+        const sx = m.x - d.left, sy = m.y - d.top;
+        Object.assign(ball.style, { left: `${Math.round(sx - 8)}px`, top: `${Math.round(sy - 8)}px` });
+        // it pops out over the rim and drops to the floor in front of the cat
+        const N = 8;
+        ball.animate(Array.from({ length: N + 1 }, (_, i) => {
+          const t = i / N, u = 1 - t, peak = Math.min(sy, fy) - 40;
+          return { transform: `translate(${Math.round((bx - sx) * t)}px, ${Math.round(u * u * sy + 2 * u * t * peak + t * t * fy - sy)}px) rotate(${i * 50}deg)`, offset: t, easing: 'steps(1, end)' };
+        }), { duration: 480, fill: 'forwards' });
+        setFrame('look'); flip = true; img.style.transform = 'scaleX(-1)';
+        let hits = 2 + Math.floor(Math.random() * 2);
+        const bat = () => {
+          if (state !== 'busy' || !hits--) { if (state === 'busy') sit(); return; }
+          setFrame('reach');
+          play('pop');
+          const to = Math.max(30, bx - 50 - Math.random() * 60);
+          const from = bx;
+          ball.getAnimations().forEach(a => a.cancel());
+          Object.assign(ball.style, { left: `${Math.round(from - 8)}px`, top: `${fy}px` });
+          ball.animate(Array.from({ length: 7 }, (_, i) => ({ transform: `translate(${Math.round((to - from) * i / 6)}px, ${i % 2 ? -4 : 0}px) rotate(${-i * 60}deg)`, offset: i / 6, easing: 'steps(1, end)' })),
+            { duration: 420, fill: 'forwards' });
+          bx = to;
+          later(() => { if (state === 'busy') walkTo(bx + 30, { speed: 90, then: () => { clearTimers(); state = 'busy'; flip = true; img.style.transform = 'scaleX(-1)'; setFrame('look'); later(bat, 700); } }); }, 450);
+        };
+        later(bat, 900);
+      }, 650);
+    } });
   }
 
   function walkTo(tx, { speed = 45, then = sit } = {}) {

@@ -25,8 +25,10 @@ export function binSvg(size) {
 let count = 0;
 const badges = new Set();
 const labelled = new Set();
+export const getTrashCount = () => count;
 export function setTrashCount(n) {
   count = Number(n) || 0;
+  drawHeaps();
   for (const b of badges) { b.textContent = count.toLocaleString('ko-KR'); b.hidden = !count; }
   for (const el of labelled) el.setAttribute('aria-label', `휴지통: 안 쓰고 놓은 바통 ${count}번`);
 }
@@ -126,6 +128,37 @@ const JAG = [
   'polygon(28% 10%, 50% 0%, 72% 10%, 92% 28%, 100% 50%, 90% 74%, 72% 92%, 50% 100%, 26% 90%, 8% 72%, 0% 50%, 10% 26%)',
 ];
 
+
+// ---------------------------------------------------------------- landing
+
+// a ball arrives at the bin: bump, thud, lid shuts (the count is the caller's business)
+function land(bin, at, { quiet = false } = {}) {
+  bin.classList.remove('bump'); void bin.offsetWidth; bin.classList.add('bump');
+  play(quiet ? 'binSoft' : 'bin');
+  bus.emit('paper-landed', { x: at.x, y: at.y, bin });
+  setTimeout(() => lid(bin, false), 320);
+  setTimeout(() => bin.classList.remove('bump'), 500);
+}
+const mouth = (bin) => { const r = bin.querySelector('svg').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height * 0.3 }; };
+
+// a few words of the dropped line, flickering beside the ball in flight (never sent anywhere)
+function fragment(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '';
+  const i = Math.floor(Math.random() * words.length);
+  let out = words[i];
+  for (let k = i + 1; k < words.length && [...out].length + [...words[k]].length < 10; k++) out += ` ${words[k]}`;
+  return `…${[...out].slice(0, 12).join('')}…`;
+}
+
+// I let go of a line (the server counts it too): don't mistake it for someone else's when the count comes back
+let owed = 0, owedT = null;
+export function iDropped() {
+  owed++;
+  clearTimeout(owedT);
+  owedT = setTimeout(() => { owed = 0; }, 60e3);
+}
+
 // Throw the writing box `src` (holding `text`) into the bin. Returns false when there's nothing to animate.
 export function tossToBin(src, text = '') {
   if (!on('trash') || !on('trash_toss') || reduceMotion() || !src?.isConnected) return false;
@@ -135,9 +168,8 @@ export function tossToBin(src, text = '') {
   const bin = binTarget();
   const r = src.getBoundingClientRect();
   if (!bin || !r.width || !r.height) return false;
-  const svg = bin.querySelector('svg').getBoundingClientRect();
   const before = count;
-  const to = { x: svg.left + svg.width / 2, y: svg.top + svg.height * 0.3 };
+  const to = mouth(bin);
 
   // 1 · the sheet crumples in four pixel steps
   const paper = h('div', { class: 'crumple-paper' }, h('span', {}, text));
@@ -163,37 +195,136 @@ export function tossToBin(src, text = '') {
 
   bus.emit('paper-toss', { to });
   crumple.finished.then(() => {
-    // 2 · the ball arcs over to the bin in stepped frames, spinning
+    // 2 · the ball arcs over to the bin in stepped frames, spinning, a few of its words flickering beside it
     const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
     sheet.remove();
     const ball = h('i', { class: 'toss-ball', 'aria-hidden': 'true' });
-    Object.assign(ball.style, { left: `${x0 - 8}px`, top: `${y0 - 8}px` });
-    document.body.append(ball);
+    const bit = fragment(text);
+    const words = bit ? h('span', { class: 'toss-words', 'aria-hidden': 'true' }, bit) : null;
+    for (const el of [ball, words].filter(Boolean)) { Object.assign(el.style, { left: `${x0 - 8}px`, top: `${y0 - 8}px` }); document.body.append(el); }
     const dist = Math.hypot(to.x - x0, to.y - y0);
     const peak = Math.min(y0, to.y) - Math.max(50, Math.min(180, dist * 0.35));
     const N = 14, ms = Math.max(420, Math.min(720, dist * 0.9));
+    const at = (i) => { const t = i / N, u = 1 - t; return [Math.round((to.x - x0) * t), Math.round(u * u * y0 + 2 * u * t * peak + t * t * to.y - y0)]; };
     const path = Array.from({ length: N + 1 }, (_, i) => {
-      const t = i / N, u = 1 - t;
-      const x = (to.x - x0) * t, y = u * u * y0 + 2 * u * t * peak + t * t * to.y - y0;
-      return { transform: `translate(${Math.round(x)}px, ${Math.round(y)}px) rotate(${i * 45}deg) scale(${(1 - t * 0.25).toFixed(2)})`, offset: t, easing: 'steps(1, end)' };
+      const [x, y] = at(i), t = i / N;
+      return { transform: `translate(${x}px, ${y}px) rotate(${i * 45}deg) scale(${(1 - t * 0.25).toFixed(2)})`, offset: t, easing: 'steps(1, end)' };
     });
+    words?.animate(Array.from({ length: N + 1 }, (_, i) => {
+      const [x, y] = at(i);
+      return { transform: `translate(${x + 14}px, ${y - 18}px)`, opacity: i < N - 2 && i % 3 !== 2 ? 1 : 0, offset: i / N, easing: 'steps(1, end)' };
+    }), { duration: ms, fill: 'forwards' });
     setTimeout(() => lid(bin, true), Math.max(0, ms - 260));
     ball.animate(path, { duration: ms, fill: 'forwards' }).finished.then(() => {
       // 3 · in it goes: the bin gives a little bump, the lid shuts, the count goes up
-      ball.remove();
-      bin.classList.remove('bump'); void bin.offsetWidth; bin.classList.add('bump');
-      play('bin');
+      ball.remove(); words?.remove();
       setTrashCount(Math.max(count, before + 1));          // (the server may have counted it already)
-      bus.emit('paper-landed', { x: to.x, y: to.y, bin });
-      setTimeout(() => lid(bin, false), 320);
-      setTimeout(() => bin.classList.remove('bump'), 500);
+      land(bin, to);
     });
   });
   return true;
 }
 
-// keep the count fresh (desk.js asks after list changes)
+// Someone else let go of a line somewhere: a ball drops into the bin from the top of the screen.
+function dropFromSky(n) {
+  const bin = binTarget();
+  if (!bin || !on('trash_toss') || reduceMotion() || document.hidden) return false;
+  for (let k = 0; k < n; k++) {
+    setTimeout(() => {
+      const to = mouth(bin);
+      const x0 = to.x + (Math.random() * 120 - 80), y0 = -24;
+      const ball = h('i', { class: 'toss-ball small', 'aria-hidden': 'true' });
+      Object.assign(ball.style, { left: `${x0 - 7}px`, top: `${y0}px` });
+      document.body.append(ball);
+      bus.emit('paper-toss', { to });
+      const N = 12, ms = 900;
+      const path = Array.from({ length: N + 1 }, (_, i) => {
+        const t = i / N, sway = Math.sin(t * Math.PI * 3) * 10 * (1 - t);
+        return { transform: `translate(${Math.round((to.x - x0) * t + sway)}px, ${Math.round((to.y - y0) * t * t)}px) rotate(${i * 30}deg)`, offset: t, easing: 'steps(1, end)' };
+      });
+      setTimeout(() => lid(bin, true), ms - 240);
+      ball.animate(path, { duration: ms, fill: 'forwards' }).finished.then(() => { ball.remove(); land(bin, to, { quiet: true }); });
+    }, k * 700);
+  }
+  return true;
+}
+
+// keep the count fresh (desk.js asks after list changes); a rise that wasn't mine falls from the sky
+let serverCount = null;
 export async function refreshTrashCount() {
   if (!on('trash')) return;
-  try { setTrashCount((await api.getCounters()).trash); } catch { /* ignore */ }
+  try {
+    const n = Number((await api.getCounters()).trash) || 0;
+    const delta = serverCount == null ? 0 : n - serverCount;
+    serverCount = n;
+    const mine = Math.min(Math.max(delta, 0), owed);
+    owed -= mine;
+    setTrashCount(n);
+    if (delta - mine > 0) dropFromSky(Math.min(delta - mine, 3));
+  } catch { /* ignore */ }
+}
+
+// ---------------------------------------------------------------- how full it is (no cap: nobody planned for this many)
+
+// Balls shown for a count: a few peek over the rim from 5, a heap from about 15, then a pile beside
+// the bin that keeps growing — slower than the count, but it never stops.
+export const ballsFor = (n) => (n < 5 ? 0 : Math.round(Math.pow(n, 0.75) * 0.9));
+const RIM = [[-1.5, 0], [-0.5, 0], [0.5, 0], [1.5, 0], [-1, 1], [0, 1], [1, 1], [-0.5, 2], [0.5, 2], [0, 3]];
+const MAX_DRAWN = 220;                         // (past this the page would only get slower, not funnier)
+let pileSlots = null;
+function slots() {
+  if (pileSlots) return pileSlots;
+  const out = [];
+  for (let i = 0; i < 80; i++) for (let j = 0; j < 14; j++) if (j <= i * 0.55) out.push([i, j]);
+  out.sort((a, b) => (a[0] + a[1] * 1.7) - (b[0] + b[1] * 1.7) || a[1] - b[1]);
+  return (pileSlots = out);
+}
+function drawHeaps() {
+  for (const bin of document.querySelectorAll('#icons .icon.trash, .phone-bin')) drawHeap(bin);
+}
+function drawHeap(bin) {
+  const svg = bin.querySelector('svg');
+  if (!svg) return;
+  let heap = bin.querySelector('.bin-heap');
+  if (!heap) { heap = h('span', { class: 'bin-heap', 'aria-hidden': 'true' }); bin.prepend(heap); }
+  const n = on('trash') ? Math.min(ballsFor(count), MAX_DRAWN) : 0;
+  bin.classList.toggle('lid-ajar', n >= 8);                     // the heap props the lid up
+  const sr = svg.getBoundingClientRect(), br = bin.getBoundingClientRect();
+  const S = sr.width;
+  const sig = `${n}|${S}|${count >= 40 ? Math.floor(Math.log2(count / 40)) : -1}`;
+  if (!S || heap.dataset.sig === sig) return;
+  heap.dataset.sig = sig;
+  const u = Math.max(8, Math.round(S / 3.7));                   // ball size
+  const ox = sr.left - br.left, oy = sr.top - br.top;          // (the svg's place inside the bin button)
+  const rimY = oy + S * 0.24, mid = ox + S / 2, floor = oy + S * 0.9;
+  const phone = bin.classList.contains('phone-bin');
+  const free = slots().filter(([, j]) => !phone || j <= 2);       // (on a phone the pile stays low, on the dock)
+  const items = [];
+  for (let k = 0; k < n; k++) {
+    let x, y;
+    if (k < RIM.length) { x = mid + RIM[k][0] * u * 0.9; y = rimY - RIM[k][1] * u * 0.7; }
+    else {
+      const [i, j] = free[(k - RIM.length) % free.length];
+      x = ox - (i + 0.6) * u * 0.85 - (j % 2) * u * 0.42; y = floor - j * u * 0.72;
+    }
+    items.push(h('i', { style: `left:${Math.round(x - u / 2)}px;top:${Math.round(y - u / 2)}px;width:${u}px;height:${Math.round(u * 0.9)}px;--r:${(k * 67) % 360}deg` }));
+  }
+  // and it starts to smell: one more wavy line each time the count doubles past 40
+  const stink = count >= 40 ? Math.min(6, 1 + Math.floor(Math.log2(count / 40))) : 0;
+  for (let k = 0; k < stink; k++) {
+    items.push(h('b', { class: 'stink', style: `left:${Math.round(mid - u * 1.4 + (k % 3) * u * 1.1 - Math.floor(k / 3) * u * 2.4)}px;top:${Math.round(rimY - u * 3.4 - (k % 2) * 5)}px;animation-delay:${(k * 0.37).toFixed(2)}s` }));
+  }
+  heap.replaceChildren(...items);
+}
+addEventListener('resize', drawHeaps);
+bus.on('settings', drawHeaps);
+
+// The cat pulls a ball back out: the lid pops and a ball comes out of the bin's mouth (page px).
+export function pullBallOut() {
+  const bin = binTarget();
+  if (!bin || !count) return null;
+  lid(bin, true);
+  setTimeout(() => lid(bin, false), 600);
+  play('lid');
+  return mouth(bin);
 }

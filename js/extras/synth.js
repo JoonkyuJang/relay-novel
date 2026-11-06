@@ -309,6 +309,12 @@ export function makeSynth(ac, { volume = 0.55 } = {}) {
       chip(t + 0.32, { base: B, pitch: [7, 7], vol: [0.6, 0.25], duty: 0.125, peak: 0.06 });
       noise(t + 0.32, { rate: 22000, vol: [0.6, 0.1], short: true, peak: 0.05 });
     },
+    // someone else's ball drops in from far away: the same thud, smaller
+    binSoft(t) {
+      noise(t, { rate: [3200, 1800], vol: [0.8, 0.3], peak: 0.08 });
+      chip(t, { base: 165, pitch: [0, -5], vol: [0.8, 0.3], wave: 'tri', peak: 0.1 });
+      chip(t + 0.32, { base: B, pitch: [7], vol: [0.4, 0.15], duty: 0.125, peak: 0.04 });
+    },
     // someone else's line finishes typing in: a small carriage return (ratchet + soft stop)
     ret(t) {
       let tt = t;

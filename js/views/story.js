@@ -9,7 +9,7 @@ import { fillPad, stampButtons, updateTicks, seal } from '../extras/stamps.js';
 import { relayRecord, recordView, gridIcon } from '../extras/record.js';
 import { play } from '../extras/sound.js';
 import { printSheets } from '../extras/print.js';
-import { tossToBin } from '../extras/bin.js';
+import { tossToBin, iDropped } from '../extras/bin.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const STATUS_CHIP = {
@@ -77,7 +77,12 @@ export function storyView(app, storyId) {
       closed = true;
       unwatch?.(); clearInterval(ticker); typing?.close(); ro?.disconnect();
       removeEventListener('pagehide', onPageHide);
-      if (baton) api.releaseBaton(storyId, baton.token).catch(() => {});
+      if (baton) {
+        // closing the window mid-line lets the line go too: the box still gets crumpled into the bin
+        iDropped();
+        tossToBin(foot.querySelector('.grid-box') ?? foot.querySelector('textarea'), foot.querySelector('textarea')?.value ?? '');
+        api.releaseBaton(storyId, baton.token).catch(() => {});
+      }
     },
   };
 
@@ -567,6 +572,7 @@ export function storyView(app, storyId) {
 
   async function cancel() {
     // the writing box crumples up and lands in the 휴지통 (just a picture: the draft is kept)
+    if (baton) iDropped();
     tossToBin(foot.querySelector('.grid-box') ?? foot.querySelector('textarea'), foot.querySelector('textarea')?.value ?? '');
     const b = baton;
     baton = null; mode = 'idle'; lastResult = null; message = '';

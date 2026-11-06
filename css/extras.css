@@ -523,6 +523,7 @@ body.phase-night .ticker-text { background: #111A2E; }
 
 /* the bin: a lid that opens, a bump when something lands (js/extras/bin.js) */
 .bin-lid { transform-box: view-box; transform-origin: 2px 3.5px; transition: transform .12s steps(2); }
+.lid-ajar .bin-lid { transform: translate(1px, -3px) rotate(9deg); }
 .lid-open .bin-lid { transform: translate(-1px, -2px) rotate(-38deg); }
 .icon.trash.bump svg, .phone-bin.bump svg { animation: bin-bump .45s steps(4) 1; transform-origin: 50% 100%; }
 @keyframes bin-bump { 0% { transform: scale(1.12, .84); } 40% { transform: scale(.94, 1.08) translateY(-2px); } 75% { transform: scale(1.03, .97); } 100% { transform: none; } }
@@ -545,3 +546,19 @@ body.phase-night .ticker-text { background: #111A2E; }
 .cat.startle { animation: cat-startle .45s steps(3) 1; }
 @keyframes cat-startle { 30% { transform: translateY(-10px) scale(.94, 1.08); } 70% { transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .bin-lid, .icon.trash.bump svg, .phone-bin.bump svg, .cat.startle { animation: none !important; transition: none !important; } }
+
+/* how full the bin is: balls over the rim, then a pile that keeps on growing (js/extras/bin.js) */
+.bin-heap { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.bin-heap i { position: absolute; background: var(--paper); border: 1px solid var(--ink); box-shadow: inset -2px -2px 0 rgba(29,42,68,.12); border-radius: 50% 40% 55% 45%; transform: rotate(var(--r));
+  background-image: linear-gradient(135deg, transparent 45%, var(--rule) 45% 58%, transparent 58%); }
+.bin-heap .stink { position: absolute; width: 6px; height: 14px; border-left: 2px solid #8C9A6B; border-radius: 0; animation: stink 1.8s steps(4) infinite; opacity: .8; }
+.bin-heap .stink::after { content: ""; position: absolute; left: 2px; top: 4px; width: 4px; height: 6px; border-left: 2px solid #8C9A6B; }
+@keyframes stink { 0% { transform: translate(0, 4px) skewX(12deg); opacity: 0; } 30% { opacity: .85; } 60% { transform: translate(2px, -4px) skewX(-12deg); } 100% { transform: translate(0, -12px) skewX(10deg); opacity: 0; } }
+.spilling .bin-heap { visibility: hidden; }
+body.phase-night .bin-heap i { border-color: #1D2A44; }
+.icon.trash { overflow: visible; }
+.toss-ball.small { width: 14px; height: 13px; }
+.toss-words { position: fixed; z-index: 2400; pointer-events: none; white-space: nowrap; padding: 0 3px; font-family: var(--text); font-size: 11px; line-height: 14px; color: var(--ink); background: var(--paper); border: 1px dashed var(--ink); }
+.floor-ball { position: absolute; width: 16px; height: 15px; background: var(--paper); border: 2px solid var(--ink); border-radius: 50% 40% 55% 45%; pointer-events: none;
+  background-image: linear-gradient(135deg, transparent 45%, var(--rule) 45% 58%, transparent 58%); }
+@media (prefers-reduced-motion: reduce) { .bin-heap .stink { animation: none; } }

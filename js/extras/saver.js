@@ -70,7 +70,8 @@ export function initSaver(app, wm, cat) {
       overlay = h('div', { class: 'saver', role: 'presentation' });
       document.body.append(overlay);
       cat?.hide();
-      requestAnimationFrame(() => overlay.classList.add('on'));
+      const o = overlay;                       // (woken within the same frame: overlay is already gone)
+      requestAnimationFrame(() => o.classList.add('on'));
     }
     return overlay;
   }

@@ -1134,6 +1134,7 @@ await step('휴지통: letting go of a line crumples the box into the bin (deskt
   await p.locator('.crumple-sheet').waitFor({ state: 'attached', timeout: 1000 });
   await p.waitForTimeout(260); await p.screenshot({ path: `${SHOTS}/32-crumple.png` });
   await p.locator('.toss-ball').waitFor({ state: 'attached', timeout: 1500 });
+  assert.ok(await p.locator('.toss-words').count(), 'a few words of the line fly with the ball');
   await p.waitForTimeout(250); await p.screenshot({ path: `${SHOTS}/33-toss.png` });
   await p.locator('#icons .icon.trash.lid-open').waitFor({ state: 'attached', timeout: 1500 });
   await p.locator('.toss-ball').waitFor({ state: 'detached', timeout: 2000 });
@@ -1141,6 +1142,25 @@ await step('휴지통: letting go of a line crumples the box into the bin (deskt
   const heard = await p.evaluate(() => window.__rnSounds);
   for (const snd of ['crumple', 'lid', 'bin']) assert.ok(heard.includes(snd), `${snd} in ${heard}`);
   await w.locator('button:text-is("이어 쓰기")').waitFor();
+  // closing the window mid-line lets it go too: crumpled all the same
+  await w.locator('button:text-is("이어 쓰기")').click();
+  await w.locator('textarea').fill('창을 닫아 버리면');
+  await w.locator('.win-close').click();
+  await p.locator('.crumple-sheet').waitFor({ state: 'attached', timeout: 1000 });
+  await p.locator('.toss-ball').waitFor({ state: 'detached', timeout: 3000 });
+  // a fuller bin: balls over the rim, a pile beside it, a smell — and someone else's drop falls in from the sky
+  await pool.query(`update app.counters set value = 60 where key = 'trash'`);
+  await p.reload();
+  await win(p, 'stories').waitFor();
+  await p.waitForFunction(() => document.querySelectorAll('#icons .icon.trash .bin-heap i').length === Math.round(Math.pow(60, 0.75) * 0.9));
+  assert.ok(await p.locator('#icons .icon.trash .bin-heap .stink').count() >= 1, 'it smells at 60');
+  assert.ok(await p.locator('#icons .icon.trash.lid-ajar').count(), 'the heap props the lid up');
+  await p.screenshot({ path: `${SHOTS}/35-full-bin.png` });
+  await p.waitForTimeout(1500);                                  // (the page learns the starting versions)
+  await pool.query(`update app.counters set value = 61 where key = 'trash'`);
+  await pool.query(`select app.bump(array['list'])`);
+  await p.locator('.toss-ball.small').waitFor({ state: 'attached', timeout: 30000 });
+  await p.waitForFunction(() => document.querySelector('#icons .icon.trash .badge')?.textContent === '61');
 
   // phone: the bin sits on the dock at the right, the cat just left of it; a tap explains the number
   const m = await newUser('폰구김', '2026100820', { mobile: true });

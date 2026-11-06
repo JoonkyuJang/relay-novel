@@ -5,6 +5,7 @@ import { isPhone } from '../wm.js';
 import { fun, bus, kst, reduceMotion } from './extras.js';
 import { play } from './sound.js';
 import { applySky } from './daynight.js';
+import { getTrashCount } from './bin.js';
 
 const EAGLE = '<svg viewBox="0 0 14 7" width="84" height="42" shape-rendering="crispEdges" aria-hidden="true"><path fill="#1D2A44" d="M0 0h1v1H0zM13 0h1v1h-1zM1 1h2v1H1zM11 1h2v1h-2zM2 2h3v1H2zM9 2h3v1H9zM4 3h6v1H4zM5 4h4v1H5zM6 5h2v1H6z"/><path fill="#D9774F" d="M10 3h1v1h-1z"/></svg>';
 
@@ -69,16 +70,23 @@ export function initFun(app, wm, { cat, clockEl }) {
   bus.on('trash-dblclick', ({ el }) => {
     if (!fun('fun_trash')) return;
     play('paper');
-    el.classList.remove('tipping'); void el.offsetWidth; el.classList.add('tipping');
-    const r = el.getBoundingClientRect();
-    for (let i = 0; i < 9; i++) {
+    el.classList.remove('tipping'); void el.offsetWidth; el.classList.add('tipping', 'spilling');
+    const r = el.querySelector('svg').getBoundingClientRect();
+    // the fuller it is, the more comes out and the further it goes — there's no upper limit on the
+    // mess (only on how many bits of paper the page draws at once)
+    const n = getTrashCount();
+    const balls = Math.min(9 + Math.floor(n / 3), 240);
+    const reach = 220 + n * 3, phone = el.classList.contains('phone-bin');
+    const life = 3100 + Math.min(n * 25, 9000);                  // a big mess lies around longer
+    for (let i = 0; i < balls; i++) {
       // (the phone bin sits on the dock: its paper spills along the dock instead of falling far)
-      const dy = el.classList.contains('phone-bin') ? 6 + Math.random() * 18 : 60 + Math.random() * 90;
-      const b = h('i', { class: 'paper-ball', style: `left:${r.left + r.width / 2}px;top:${r.top + 18}px;--dx:${-40 - Math.random() * 220}px;--dy:${dy}px;--r:${Math.round(Math.random() * 360)}deg;animation-delay:${i * 40}ms` });
+      const dy = phone ? 6 + Math.random() * 18 : 40 + Math.random() * (60 + Math.min(n, 400));
+      const b = h('i', { class: 'paper-ball', style: `left:${r.left + r.width / 2}px;top:${r.top + 10}px;--dx:${Math.round(-30 - Math.random() * reach)}px;--dy:${Math.round(dy)}px;--r:${Math.round(Math.random() * 360)}deg;animation-delay:${Math.round(i * Math.max(8, 40 - n / 10))}ms;animation-duration:${life}ms` });
       document.body.append(b);
-      setTimeout(() => b.remove(), 3200);
+      setTimeout(() => b.remove(), life + i * 40 + 200);
     }
     setTimeout(() => el.classList.remove('tipping'), 1600);
+    setTimeout(() => el.classList.remove('spilling'), 1400);      // …and somehow it's full again
   });
 
   // ---------------------------------------------------------- 시계 열 번: 원고지 시간
