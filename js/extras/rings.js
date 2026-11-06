@@ -11,7 +11,8 @@ import { hoverTip } from './bin.js';
 const SVGNS = 'http://www.w3.org/2000/svg';
 const MAX_DRAWN = 260;
 let count = 0;
-export const ringCount = () => count;
+// (the server sends the latest 400 at most, so past that the count is "400개 이상")
+export const ringLabel = () => `${count.toLocaleString('ko-KR')}개${count >= 400 ? ' 이상' : ''}`;
 
 function hash(str) { let x = 2166136261; for (const c of str) { x ^= c.charCodeAt(0); x = Math.imul(x, 16777619); } return x >>> 0; }
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
@@ -63,7 +64,7 @@ export function initRings(desktop) {
       hoverTip(el, () => [
         h('b', {}, '늦은 밤의 커피 자국'),
         h('span', {}, '밤 12시부터 새벽 6시 사이에 누군가 줄을 쓸 때마다 하나씩 남아요. 오래된 자국일수록 조금씩 옅어져요.'),
-        h('span', { class: 'faint' }, `이 자국: ${when(row.at)} · 지금까지 ${rows.length.toLocaleString('ko-KR')}개`),
+        h('span', { class: 'faint' }, `이 자국: ${when(row.at)} · 지금까지 ${ringLabel()}`),
       ], { delay: 700 });                             // (a mouse just passing over the desk shouldn't pop boxes)
       return el;
     }));

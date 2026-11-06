@@ -265,12 +265,19 @@ async function checkVersions() {
   checking = true;
   try {
     const keys = [...new Set([...subscribers].flatMap(s => s.keys))];
-    const { data, error } = await sb.from('realtime_signals').select('key,version').in('key', keys);
+    const { data, error } = await sb.from('realtime_signals').select('key,version,updated_at').in('key', keys);
     if (error || !data) return;
-    for (const { key, version } of data) {
+    for (const { key, version, updated_at: at } of data) {
       const prev = versions.get(key);
       versions.set(key, version);
-      if (prev !== undefined ? prev !== version : seenEmpty.has(key)) notifyKey(key);
+      if (prev !== undefined ? prev !== version : seenEmpty.has(key)) { notifyKey(key); continue; }
+      // First sighting of a key: a window that just opened fetched its data a moment before this check.
+      // If the key changed around or after that moment, that fetch may have missed it: fetch once more.
+      // (3 s of slack for clock differences between the phone and the server.)
+      if (prev === undefined && at) {
+        const changed = Date.parse(at);
+        for (const s of subscribers) if (s.keys.includes(key) && changed >= s.since - 3000) notify(s);
+      }
     }
     // keys with no row yet (nothing has happened there so far, e.g. a fresh 방명록 after 초기화):
     // when their first row shows up, that is a change too
@@ -314,7 +321,7 @@ function ensureChannel() {
 // Calls fn() (debounced) whenever one of `keys` changes on the server. Returns unsubscribe.
 export function watch(keys, fn) {
   ensureChannel();
-  const sub = { keys, fn, t: null };
+  const sub = { keys, fn, t: null, since: Date.now() };
   subscribers.add(sub);
   setTimeout(checkVersions, 1000);        // learn the starting versions
   return () => { clearTimeout(sub.t); subscribers.delete(sub); };

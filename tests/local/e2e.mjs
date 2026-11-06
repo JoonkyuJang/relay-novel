@@ -52,8 +52,8 @@ async function handle(route) {
 
   if (url.pathname === '/rest/v1/realtime_signals') {          // the version poll (anon can read this table)
     const keys = (url.searchParams.get('key') ?? '').replace(/^in\.\(|\)$/g, '').split(',').map(k => k.replace(/^"|"$/g, '')).filter(Boolean);
-    const r = await pool.query('select key, version from public.realtime_signals where key = any($1)', [keys]);
-    return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(r.rows.map(x => ({ key: x.key, version: Number(x.version) }))) });
+    const r = await pool.query('select key, version, updated_at from public.realtime_signals where key = any($1)', [keys]);
+    return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(r.rows.map(x => ({ key: x.key, version: Number(x.version), updated_at: x.updated_at }))) });
   }
   const m = url.pathname.match(/^\/rest\/v1\/rpc\/(\w+)$/);
   if (!m) return route.fulfill({ status: 404, headers: cors, body: '' });
@@ -1245,7 +1245,12 @@ await step('more touches: sound on the login screen, coffee rings, patterns, sha
   await p.keyboard.press('Escape');
   await w.locator('.line').nth(1).locator('.who').click();
   await p.locator('.props .stamp-btn').first().click();
-  await p.waitForFunction(() => window.__rnSounds.includes('dab'));
+  // (ink comes back over ~20 s, so a slow server can leave just enough for one more; the next one dabs for sure)
+  if (!(await p.waitForFunction(() => window.__rnSounds.includes('dab'), null, { timeout: 2500 }).catch(() => null))) {
+    await p.waitForTimeout(300);
+    await p.locator('.props .stamp-btn').nth(1).click();
+  }
+  await p.waitForFunction(() => window.__rnSounds.includes('dab'), null, { timeout: 5000 });
   await p.keyboard.press('Escape');
   void lines;
   // the writer's 도장 수첩: 첫 줄 and 올빼미 are inked

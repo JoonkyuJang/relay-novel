@@ -19,7 +19,7 @@ function engine() {
 // Browsers only start audio after a user gesture.
 // (Only matters before the first sound has played; after that wake() resumes on demand.)
 let unlocked = false;
-for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+for (const ev of ['pointerdown', 'keydown', 'touchstart', 'touchend', 'click']) {   // (iOS only trusts some of them)
   addEventListener(ev, () => {
     if (unlocked || !synth) return;
     if (synth.ac.state === 'running') { unlocked = true; return; }

@@ -550,6 +550,14 @@ await test('커피 자국, 결산, 도장 수첩 facts: late-night lines only, n
   for (const k of ['coffee_rings', 'cat_mischief', 'cat_gifts', 'guestbook_plane', 'stamp_ink', 'stamp_card', 'recap', 'deadline_fireworks', 'desk_patterns', 'window_shade', 'tab_icon']) assert.equal(s.extras[k], true, k);
 });
 
+await test('flood guard: a script inventing people is capped per minute (real use never is)', async () => {
+  await su(`begin; set local session_replication_role = replica; insert into app.stories (title, created_at) select 'flood', now() from generate_series(1, 60); commit;`);
+  await expectErr(rpc('create_story', { p_title: '하나 더', p_text: '막혀요', ...who(9500) }), 'rate_limited');
+  await su(`delete from app.stories where title = 'flood'`);
+  const ok = await rpc('create_story', { p_title: '이제는', p_text: '돼요', ...who(9501) });
+  assert.ok(ok.story_id);
+});
+
 await test('관리 · 초기화: counts, test stories only, then everything; admin-only', async () => {
   await assert.rejects(rpc('admin_reset', { p_what: ['cat_pets'] }), /permission denied/);
   await expectErr(rpc('admin_reset', { p_what: ['cat_pets'] }, { as: 'authenticated', sub: USER }), 'not_admin');

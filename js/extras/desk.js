@@ -7,7 +7,7 @@ import { soundOn, setSound, play } from './sound.js';
 import { isPhone } from '../wm.js';
 import { binSvg, trashBadge, tipContent, hoverTip, initPhoneBin, refreshTrashCount } from './bin.js';
 import { giftArt, myGifts, GIFT_NAMES } from './cat.js';
-import { ringCount } from './rings.js';
+import { ringLabel } from './rings.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 function pixel(path, size = 14, vb = 14) {
@@ -126,7 +126,7 @@ export function aboutView(app) {
         row('가동 시간', since ? `${Math.floor(up / 86400e3)}일 ${Math.floor(up / 3600e3) % 24}시간` : '—'),
         on('cat') ? row('고양이', a ? `${X('cat_name')} 1마리 · 쓰다듬은 횟수 ${Number(a.cat_pets).toLocaleString('ko-KR')}` : X('cat_name')) : null,
         on('trash') ? row('휴지통', a ? `안 쓰고 놓은 바통 ${a.trash}번` : '—') : null,
-        on('coffee_rings') ? row('커피 자국', `${ringCount().toLocaleString('ko-KR')}개 (늦은 밤에 쓴 줄마다)`) : null,
+        on('coffee_rings') ? row('커피 자국', `${ringLabel()} (늦은 밤에 쓴 줄마다)`) : null,
         on('cat_gifts') && Object.keys(myGifts()).length ? row('선물함', h('span', { class: 'gift-shelf' },
           Object.entries(myGifts()).map(([k, n]) => h('span', { class: 'gift-item', title: GIFT_NAMES[k] ?? k }, giftArt(k, 16), h('span', {}, `×${n}`))))) : null),
       h('div', { class: 'about-disk' }, h('span', { style: `width:${pct}%` })),

@@ -151,6 +151,7 @@ export function attachReveal(anchor, getSpec) {
 
 const MESSAGES = {
   network:             () => '서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.',
+  rate_limited:        () => '지금 너무 많은 글이 한꺼번에 올라오고 있어요. 잠시 후 다시 시도해 주세요.',
   submissions_closed:  () => '지금은 글쓰기가 닫혀 있어요.',
   new_stories_closed:  () => '지금은 새 이야기를 시작할 수 없어요.',
   invalid_name:        () => '이름을 1~20자로 입력해 주세요.',
