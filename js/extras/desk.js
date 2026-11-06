@@ -5,6 +5,7 @@ import { h, icon } from '../ui.js';
 import { on, fun, X, bus, kst, WEEKDAY, manuscript } from './extras.js';
 import { soundOn, setSound, play } from './sound.js';
 import { isPhone } from '../wm.js';
+import { binSvg, trashBadge, tipContent, hoverTip, initPhoneBin, refreshTrashCount } from './bin.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 function pixel(path, size = 14, vb = 14) {
@@ -18,7 +19,6 @@ export const ICONS = {
   speakerOn: '<path d="M1 5h3l4-3v10l-4-3H1z" fill="currentColor"/><path d="M10 4.5c1 1 1 4 0 5M11.5 3c2 2 2 6 0 8" fill="none" stroke="currentColor"/>',
   speakerOff: '<path d="M1 5h3l4-3v10l-4-3H1z" fill="currentColor"/><path d="M10 5l3 4M13 5l-3 4" stroke="#D9774F" stroke-width="1.5"/>',
   memo: '<path data-fill d="M2.5 1.5h11v13h-11z" fill="#FFF3B8" stroke="currentColor"/><path d="M4 4.5h8M4 7.5h8M4 10.5h5" stroke="currentColor"/>',
-  trash: '<path d="M2 3.5h12" stroke="currentColor"/><path d="M6 1.5h4v2H6z" fill="none" stroke="currentColor"/><path data-fill d="M3.5 4.5h9l-1 10h-7z" fill="#FFF9EF" stroke="currentColor"/><path d="M6.5 6.5v6M9.5 6.5v6" stroke="currentColor"/>',
 };
 
 // ---------------------------------------------------------------- 마감 시계
@@ -160,49 +160,17 @@ export function firstSentence(stories) {
   return { text: s.first_line, src: `「${s.title || '제목 없는 이야기'}」 첫 줄`, date: `${m}.${String(d).padStart(2, '0')}`, id: s.id };
 }
 
-// ---------------------------------------------------------------- hover box (desktop icons)
-
-// A small pixel balloon beside an icon while the mouse is over it (or it has keyboard focus).
-function hoverTip(el, content) {
-  let tip = null, t = null;
-  const show = () => {
-    clearTimeout(t);
-    t = setTimeout(() => {
-      tip?.remove();
-      tip = h('div', { class: 'hover-tip', 'aria-hidden': 'true' }, content());
-      document.body.append(tip);
-      const r = el.getBoundingClientRect(), w = tip.offsetWidth, ht = tip.offsetHeight;
-      const left = r.left - w - 10 > 8 ? r.left - w - 10 : r.right + 10;
-      tip.classList.toggle('right', left > r.left);
-      tip.style.left = `${Math.round(left)}px`;
-      tip.style.top = `${Math.round(Math.min(Math.max(36, r.top + r.height / 2 - ht / 2), innerHeight - ht - 8))}px`;
-    }, 350);
-  };
-  const hide = () => { clearTimeout(t); tip?.remove(); tip = null; };
-  el.addEventListener('mouseenter', show);
-  el.addEventListener('mouseleave', hide);
-  el.addEventListener('focus', () => { if (el.matches(':focus-visible')) show(); });
-  el.addEventListener('blur', hide);
-  el.addEventListener('pointerdown', hide);
-  addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
-}
-
 // ---------------------------------------------------------------- the desktop itself
 
 export function initDesk(app, wm, { desktop, iconsNav }) {
-  // extra desktop icons: 메모장 + 휴지통 (desktop only)
-  const trashBadge = h('span', { class: 'badge', hidden: true });
+  // extra desktop icons: 메모장 + 휴지통 (the phone gets its own bin on the dock: bin.js)
   const memoIcon = h('a', { class: 'icon extra', href: '#/memo' }, pixel(ICONS.memo, 40, 16), h('span', {}, '메모장'));
-  const trashIcon = h('button', { type: 'button', class: 'icon extra trash', 'aria-label': '휴지통' },
-    trashBadge, pixel(ICONS.trash, 40, 16), h('span', {}, '휴지통'));
-  let trashCount = 0;
-  hoverTip(trashIcon, () => [
-    h('b', {}, `휴지통 · ${trashCount.toLocaleString('ko-KR')}`),
-    h('span', {}, "'이어 쓰기'로 줄을 맡았다가 끝내 올리지 않고 놓은 횟수예요. 쓰던 중에 취소했든, 시간이 다 되어 자리가 넘어갔든 올리지 않았으면 여기 모여요."),
-    h('span', { class: 'faint' }, '누가 놓았는지는 남기지 않아요.'),
-  ]);
+  const trashIcon = h('button', { type: 'button', class: 'icon extra trash', 'aria-label': '휴지통' });
+  trashIcon.append(trashBadge(trashIcon), binSvg(40), h('span', {}, '휴지통'));
+  hoverTip(trashIcon, tipContent);
   trashIcon.addEventListener('dblclick', () => bus.emit('trash-dblclick', { el: trashIcon }));
   trashIcon.addEventListener('click', (e) => { if (!fun('fun_trash') || e.detail === 0) app.go('/about'); });   // keyboard Enter always opens it
+  initPhoneBin(app, desktop);
 
   const sticky = h('aside', { class: 'sticky', hidden: true, 'aria-label': '오늘의 첫 문장' });
 
@@ -211,16 +179,7 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
     if (on('memo')) iconsNav.append(memoIcon);
     if (on('trash')) iconsNav.append(trashIcon);
   }
-  async function refreshTrash() {
-    if (!on('trash')) return;
-    try {
-      const a = await api.getCounters();          // two numbers, no table scans
-      trashCount = Number(a.trash) || 0;
-      trashBadge.textContent = a.trash;
-      trashBadge.hidden = !a.trash;
-      trashIcon.setAttribute('aria-label', `휴지통: 안 쓰고 놓은 바통 ${trashCount}번`);
-    } catch { /* ignore */ }
-  }
+  const refreshTrash = refreshTrashCount;
   async function refreshSticky() {
     if (!on('first_sentence') || isPhone()) { sticky.hidden = true; return; }
     let stories = [];

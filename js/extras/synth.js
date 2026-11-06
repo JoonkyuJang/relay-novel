@@ -292,6 +292,23 @@ export function makeSynth(ac, { volume = 0.55 } = {}) {
       chip(t, { base: B, pitch: [-17, -17, -17, -17], vol: [1, 1, 0.9, 0.4], duty: [0.5, 0.25, 0.5, 0.25], peak: 0.1 });
       chip(t + 6 * FR, { base: B, pitch: [-18, -18, -18, -18, -18, -18], vol: [1, 1, 0.9, 0.7, 0.4, 0.15], duty: [0.5, 0.25, 0.5, 0.25, 0.5, 0.25], peak: 0.1 });
     },
+    // a writing box crumpled up: a handful of quick paper crinkles
+    crumple(t) {
+      const rates = [14000, 22000, 9000, 26000, 12000, 18000, 7000];
+      rates.forEach((rate, i) => noise(t + i * 0.042 + (i % 2) * 0.008, { rate, vol: [1, 0.35], short: i % 3 === 0, peak: 0.08, frame: FR / 3 }));
+      noise(t + 0.3, { rate: [5000, 3000], vol: [0.7, 0.25], peak: 0.07 });
+    },
+    // the bin lid tips open: one tiny tick
+    lid(t) {
+      chip(t, { base: B, pitch: [0, 5], vol: [0.5, 0.25], duty: 0.125, peak: 0.05 });
+    },
+    // the ball lands in the bin: a soft papery thud, then the lid clinks shut
+    bin(t) {
+      noise(t, { rate: [3200, 1800, 1200], vol: [1, 0.5, 0.2], peak: 0.15 });
+      chip(t, { base: 147, pitch: [0, -5, -9], vol: [1, 0.5, 0.2], wave: 'tri', peak: 0.2 });
+      chip(t + 0.32, { base: B, pitch: [7, 7], vol: [0.6, 0.25], duty: 0.125, peak: 0.06 });
+      noise(t + 0.32, { rate: 22000, vol: [0.6, 0.1], short: true, peak: 0.05 });
+    },
     // someone else's line finishes typing in: a small carriage return (ratchet + soft stop)
     ret(t) {
       let tt = t;

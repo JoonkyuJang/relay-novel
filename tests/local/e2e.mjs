@@ -1118,6 +1118,53 @@ await step('a tab left open across a deploy offers to reload; no typing counts o
   await w.locator('button:text-is("취소")').click();
 });
 
+await step('휴지통: letting go of a line crumples the box into the bin (desktop + phone bin by the cat)', async () => {
+  const q = (sql, a) => pool.query(sql, a).then(r => r.rows[0].r);
+  const id = (await q(`select public.create_story('구겨질 이야기', '첫 줄.', '첫줄', '2026100818', 'seed') as r`)).story_id;
+  const p = await newUser('구김', '2026100819');
+  await p.addInitScript(() => { localStorage.setItem('rn.sound', '1'); localStorage.setItem('rn.debugSounds', '1'); });
+  await p.goto(`${BASE}/#/story/${id}`);
+  const w = win(p, `story:${id}`);
+  await w.locator('button:text-is("이어 쓰기")').click();
+  await w.locator('textarea').fill('이 줄은 버려질 운명이었다');
+  const badge = p.locator('#icons .icon.trash .badge');
+  const before = Number(await badge.textContent() || 0);
+  await p.evaluate(() => { window.__rnSounds = []; });
+  await w.locator('button:text-is("취소")').click();
+  await p.locator('.crumple-sheet').waitFor({ state: 'attached', timeout: 1000 });
+  await p.waitForTimeout(260); await p.screenshot({ path: `${SHOTS}/32-crumple.png` });
+  await p.locator('.toss-ball').waitFor({ state: 'attached', timeout: 1500 });
+  await p.waitForTimeout(250); await p.screenshot({ path: `${SHOTS}/33-toss.png` });
+  await p.locator('#icons .icon.trash.lid-open').waitFor({ state: 'attached', timeout: 1500 });
+  await p.locator('.toss-ball').waitFor({ state: 'detached', timeout: 2000 });
+  await p.waitForFunction((n) => Number(document.querySelector('#icons .icon.trash .badge')?.textContent || 0) >= n + 1, before);
+  const heard = await p.evaluate(() => window.__rnSounds);
+  for (const snd of ['crumple', 'lid', 'bin']) assert.ok(heard.includes(snd), `${snd} in ${heard}`);
+  await w.locator('button:text-is("이어 쓰기")').waitFor();
+
+  // phone: the bin sits on the dock at the right, the cat just left of it; a tap explains the number
+  const m = await newUser('폰구김', '2026100820', { mobile: true });
+  await m.goto(`${BASE}/#/story/${id}`);
+  const mw = win(m, `story:${id}`);
+  await mw.locator('button:text-is("이어 쓰기")').waitFor();
+  await m.waitForTimeout(500);
+  const bin = await m.locator('.phone-bin').boundingBox();
+  const cat = await m.locator('.cat').boundingBox();
+  const dock = await m.locator('.dock').boundingBox();
+  assert.ok(bin && bin.y + bin.height <= dock.y + 3 && bin.x + bin.width > dock.width - 20, `bin on the dock at the right (${JSON.stringify(bin)})`);
+  assert.ok(cat.x + cat.width <= bin.x + 6, `the cat sits left of the bin (cat ${cat.x}..${cat.x + cat.width}, bin ${bin.x})`);
+  await m.locator('.phone-bin').click();
+  await m.locator('.hover-tip.above >> text=끝내 올리지 않고 놓은 횟수').waitFor();
+  await m.screenshot({ path: `${SHOTS}/34-phone-bin.png` });
+  await m.locator('.hover-tip').evaluate(e => e.remove());
+  await mw.locator('button:text-is("이어 쓰기")').click();
+  await mw.locator('textarea').fill('폰에서도 구겨요');
+  await mw.locator('button:text-is("취소")').click();
+  await m.locator('.toss-ball').waitFor({ state: 'attached', timeout: 2000 });
+  await m.locator('.phone-bin.lid-open').waitFor({ state: 'attached', timeout: 2000 });
+  await m.locator('.toss-ball').waitFor({ state: 'detached', timeout: 2000 });
+});
+
 // Last on purpose: it wipes the database.
 await step('관리 · 초기화: one counter, then everything (with a backup download first)', async () => {
   await finishedStory('지워질 이야기');

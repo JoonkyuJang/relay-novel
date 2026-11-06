@@ -5,7 +5,7 @@ import * as api from '../api.js';
 import { h } from '../ui.js';
 import { isPhone } from '../wm.js';
 import { SPRITES } from './cat-sprites.js';
-import { on, X, bus, reduceMotion } from './extras.js';
+import { on, X, fun, bus, reduceMotion } from './extras.js';
 import { play, voice, soundOn } from './sound.js';
 import { currentPhase } from './daynight.js';
 
@@ -359,6 +359,43 @@ export function initCat(app, wm, desktop) {
     }, ms + 250));
   });
 
+  // ---------------------------------------------------------- the 휴지통
+
+  const idle = () => ['sit', 'look', 'watch'].includes(state) && !el.hidden;
+  const faceX = (px) => { flip = (px - desktop.getBoundingClientRect().left) < x; img.style.transform = flip ? 'scaleX(-1)' : ''; };
+  // a paper ball flies: follow it with the eyes
+  bus.on('paper-toss', ({ to }) => {
+    if (!idle()) return;
+    if (state !== 'watch') { clearTimers(); state = 'look'; later(sit, 3200); }
+    setFrame('look'); faceX(to.x);
+  });
+  // it lands: a startled "!" — on the desktop, sometimes a walk over to look into the bin
+  bus.on('paper-landed', ({ x: bx }) => {
+    if (!idle()) return;
+    faceX(bx);
+    if (isPhone()) {
+      el.classList.remove('startle'); void el.offsetWidth; el.classList.add('startle');
+      say('!', 900);
+      setTimeout(() => el.classList.remove('startle'), 500);
+      return;
+    }
+    if (state !== 'watch' && on('cat_wander') && Math.random() < 0.4) {
+      const tx = Math.min(desktop.clientWidth - 60, Math.max(40, bx - desktop.getBoundingClientRect().left - 30));
+      walkTo(tx, { speed: 80, then: () => {
+        clearTimers(); state = 'look'; setFrame('look'); faceX(bx);
+        say('?', 1400);
+        later(sit, 4000);
+      } });
+    } else {
+      say('!', 900);
+    }
+  });
+  // 와르르: the bin tips over — the cat bolts (desktop) or jumps (phone, it's right next to it)
+  bus.on('trash-dblclick', () => {
+    if (!fun('fun_trash') || el.hidden || state === 'away') return;
+    if (isPhone()) api_.jump(); else setTimeout(() => api_.run(), 250);
+  });
+
   el.addEventListener('click', (e) => { e.stopPropagation(); pet(); });
   el.addEventListener('yawn', () => { if (!el.hidden) { say('하암~', 1800); play('yawn'); } });
 
@@ -375,7 +412,8 @@ export function initCat(app, wm, desktop) {
     el.setAttribute('aria-label', `${X('cat_name')} 쓰다듬기`);
     document.body.classList.toggle('cat-phone', isPhone() && !el.hidden);   // phone windows leave it a gap above the dock
     if (el.hidden) { reset(); state = 'sit'; return; }
-    const fx = isPhone() ? desktop.clientWidth - W - 10 : Math.min(desktop.clientWidth - 150, Math.max(80, x || desktop.clientWidth * 0.6));
+    // (on a phone it sits at the right of the dock — or just left of the 휴지통 when that's there too)
+    const fx = isPhone() ? desktop.clientWidth - W - 10 - (document.body.classList.contains('bin-phone') ? 44 : 0) : Math.min(desktop.clientWidth - 150, Math.max(80, x || desktop.clientWidth * 0.6));
     if (state === 'nap' && !isPhone() && anim) return;     // still napping on a window: leave it be
     reset();
     place(fx, floorY());

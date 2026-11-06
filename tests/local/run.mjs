@@ -515,7 +515,7 @@ await test('내가 쓴 줄 by 이름 + 학번; crash reports are throttled and a
 await test('little touches: new switches default on, 첫눈 date is a real date', async () => {
   const s = await rpc('get_public_settings');
   for (const k of ['zoom_rects', 'shake_on_error', 'press_buttons', 'pixel_cursor', 'type_in_lines', 'milestones', 'ticker',
-    'cat_typing', 'cat_seal_nap', 'skyline', 'seasons']) assert.equal(s.extras[k], true, k);
+    'cat_typing', 'cat_seal_nap', 'skyline', 'seasons', 'trash_toss', 'trash_phone']) assert.equal(s.extras[k], true, k);
   assert.equal(s.extras.snow_from, '2026-12-01T00:00:00+09:00');
   await expectErr(admin('admin_update_settings', { p: { extras: { snow_from: 'first snow' } } }), 'invalid_settings');
   await expectErr(admin('admin_update_settings', { p: { extras: { skyline: 'on' } } }), 'invalid_settings');

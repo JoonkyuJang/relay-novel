@@ -9,6 +9,7 @@ import { fillPad, stampButtons, updateTicks, seal } from '../extras/stamps.js';
 import { relayRecord, recordView, gridIcon } from '../extras/record.js';
 import { play } from '../extras/sound.js';
 import { printSheets } from '../extras/print.js';
+import { tossToBin } from '../extras/bin.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const STATUS_CHIP = {
@@ -45,6 +46,12 @@ export function storyView(app, storyId) {
   const scroll = h('div', { class: 'win-scroll' }, head, list, record);
   const ticks = h('div', { class: 'stamp-ticks', hidden: true, 'aria-hidden': 'true' });
   const foot = h('div', { class: 'win-foot' });
+  // Pressing 취소 / 올리기 must not take the focus from the writing box first: on a phone that
+  // drops the keyboard, the page re-lays itself mid-tap and the tap lands somewhere else.
+  foot.addEventListener('pointerdown', (e) => {
+    const ta = foot.querySelector('textarea');
+    if (ta && document.activeElement === ta && e.target.closest('button')) e.preventDefault();
+  });
   const live = h('div', { class: 'sr-only', 'aria-live': 'polite' });
   const body = document.createDocumentFragment();
   body.append(bar, scroll, ticks, foot, live);
@@ -559,6 +566,8 @@ export function storyView(app, storyId) {
   }
 
   async function cancel() {
+    // the writing box crumples up and lands in the 휴지통 (just a picture: the draft is kept)
+    tossToBin(foot.querySelector('.grid-box') ?? foot.querySelector('textarea'), foot.querySelector('textarea')?.value ?? '');
     const b = baton;
     baton = null; mode = 'idle'; lastResult = null; message = '';
     typing?.send(null);

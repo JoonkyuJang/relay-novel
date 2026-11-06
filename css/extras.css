@@ -338,11 +338,11 @@ body.amber .grid-cells, body.amber .grid-cells span { border-color: #5E3F00; }
   /* writing on a phone: give the keyboard the room (dock and cat step aside while a field has focus) */
   body:has(.win-foot textarea:focus) .dock, body:has(.win-foot textarea:focus) .cat-layer { display: none; }
   body:has(.win-foot textarea:focus) .desktop { bottom: 0; }
-  body.cat-phone:has(.win-foot textarea:focus) .win:not(.amber-toast) { bottom: 10px; }
+  body:is(.cat-phone, .bin-phone):has(.win-foot textarea:focus) .win:not(.amber-toast) { bottom: 10px; }
   .win.amber-toast { left: 10px !important; right: 10px; top: auto !important; bottom: 74px; width: auto !important; height: auto !important; }
-  body.cat-phone:not(.not-entered) .win { bottom: 48px; }
+  body:is(.cat-phone, .bin-phone):not(.not-entered) .win { bottom: 48px; }
   .not-entered .cat-layer, .not-entered .sky-orb { display: none; }
-  body.cat-phone .win.amber-toast { bottom: 110px; }
+  body:is(.cat-phone, .bin-phone) .win.amber-toast { bottom: 110px; }
   .read-stage { padding: 16px 14px; }
   .read-cur { font-size: 20px; line-height: 30px; }
   .read-ctrl select.field { flex: 1 1 40%; }
@@ -518,4 +518,30 @@ body.phase-night .ticker-text { background: #111A2E; }
 .hover-tip { position: fixed; z-index: 2300; width: 230px; word-break: keep-all; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--paper); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); font-size: 11px; line-height: 16px; pointer-events: none; }
 .hover-tip::after { content: ""; position: absolute; top: calc(50% - 5px); right: -7px; width: 8px; height: 8px; background: var(--paper); border-right: 2px solid var(--ink); border-top: 2px solid var(--ink); transform: rotate(45deg); }
 .hover-tip.right::after { right: auto; left: -7px; transform: rotate(-135deg); }
+.hover-tip.above::after { top: auto; bottom: -7px; right: auto; left: var(--arrow-x, 50%); transform: rotate(135deg); }
 .hover-tip b { font-size: 12px; }
+
+/* the bin: a lid that opens, a bump when something lands (js/extras/bin.js) */
+.bin-lid { transform-box: view-box; transform-origin: 2px 3.5px; transition: transform .12s steps(2); }
+.lid-open .bin-lid { transform: translate(-1px, -2px) rotate(-38deg); }
+.icon.trash.bump svg, .phone-bin.bump svg { animation: bin-bump .45s steps(4) 1; transform-origin: 50% 100%; }
+@keyframes bin-bump { 0% { transform: scale(1.12, .84); } 40% { transform: scale(.94, 1.08) translateY(-2px); } 75% { transform: scale(1.03, .97); } 100% { transform: none; } }
+.crumple-sheet { position: fixed; z-index: 2400; pointer-events: none; transform-origin: 50% 50%;
+  filter: drop-shadow(2px 0 0 var(--ink)) drop-shadow(-2px 0 0 var(--ink)) drop-shadow(0 2px 0 var(--ink)) drop-shadow(0 -2px 0 var(--ink)); }
+.crumple-paper { position: absolute; inset: 0; overflow: hidden; padding: 6px 8px; background: #FFFDF8 repeating-linear-gradient(to bottom, transparent 0 7px, #DCE1EA 7px 8px); box-shadow: inset -4px -4px 0 rgba(29,42,68,.16); font-family: var(--text); font-size: 14px; line-height: 22px; color: var(--ink); }
+.toss-ball { position: fixed; z-index: 2400; width: 18px; height: 17px; background: var(--paper); border: 2px solid var(--ink); border-radius: 50% 40% 55% 45%; pointer-events: none;
+  background-image: linear-gradient(135deg, transparent 45%, var(--rule) 45% 55%, transparent 55%), linear-gradient(45deg, transparent 60%, var(--rule) 60% 68%, transparent 68%); }
+.phone-bin { display: none; }
+@media (max-width: 767px) {
+  body.bin-phone .phone-bin { display: block; position: absolute; right: 8px; bottom: 2px; z-index: 99999; width: 36px; height: 40px; padding: 4px 3px 0; border: none; background: none; color: var(--ink); touch-action: manipulation; line-height: 0; }
+  body.bin-phone .phone-bin svg { display: block; }
+  .phone-bin .badge { position: absolute; right: -4px; top: -6px; background: #C23B32; color: #FFF9EF; font-size: 10px; line-height: 14px; padding: 0 4px; border: 1px solid #1D2A44; }
+  body.phase-night .phone-bin { color: #F3EBDD; }
+  body.phase-night .phone-bin svg path[data-fill] { fill: #1F2B47; }
+  .not-entered .phone-bin, body:has(.win-foot textarea:focus) .phone-bin { display: none !important; }
+  .phone-bin.tipping svg { animation: tip 1.4s steps(6) 1; transform-origin: 85% 95%; }
+  .hover-tip.above { width: min(260px, calc(100vw - 16px)); }
+}
+.cat.startle { animation: cat-startle .45s steps(3) 1; }
+@keyframes cat-startle { 30% { transform: translateY(-10px) scale(.94, 1.08); } 70% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .bin-lid, .icon.trash.bump svg, .phone-bin.bump svg, .cat.startle { animation: none !important; transition: none !important; } }

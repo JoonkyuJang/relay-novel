@@ -72,7 +72,9 @@ export function initFun(app, wm, { cat, clockEl }) {
     el.classList.remove('tipping'); void el.offsetWidth; el.classList.add('tipping');
     const r = el.getBoundingClientRect();
     for (let i = 0; i < 9; i++) {
-      const b = h('i', { class: 'paper-ball', style: `left:${r.left + r.width / 2}px;top:${r.top + 18}px;--dx:${-40 - Math.random() * 220}px;--dy:${60 + Math.random() * 90}px;--r:${Math.round(Math.random() * 360)}deg;animation-delay:${i * 40}ms` });
+      // (the phone bin sits on the dock: its paper spills along the dock instead of falling far)
+      const dy = el.classList.contains('phone-bin') ? 6 + Math.random() * 18 : 60 + Math.random() * 90;
+      const b = h('i', { class: 'paper-ball', style: `left:${r.left + r.width / 2}px;top:${r.top + 18}px;--dx:${-40 - Math.random() * 220}px;--dy:${dy}px;--r:${Math.round(Math.random() * 360)}deg;animation-delay:${i * 40}ms` });
       document.body.append(b);
       setTimeout(() => b.remove(), 3200);
     }

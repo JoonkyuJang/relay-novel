@@ -31,6 +31,7 @@ export const DEFAULTS = {
   zoom_rects: true, shake_on_error: true, press_buttons: true, pixel_cursor: true,
   type_in_lines: true, milestones: true, ticker: true, cat_typing: true, cat_seal_nap: true,
   skyline: true, seasons: true, snow_from: '2026-12-01T00:00:00+09:00',
+  trash_toss: true, trash_phone: true,
 };
 
 let current = { ...DEFAULTS };
