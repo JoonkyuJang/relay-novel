@@ -521,7 +521,7 @@ export function adminStoryView(app, storyId) {
     table.replaceChildren(h('table', { class: 'table' },
       h('thead', {}, h('tr', {}, ['#', '종류', '내용', '작성자', '기기', '시각', ''].map(t => h('th', { scope: 'col' }, t)))),
       h('tbody', {}, lines.map(l => h('tr', { class: [l.kind === 'conflict' && l.conflict_status === 'open' ? 'is-conflict' : '', l.kind === 'canonical' ? 'is-canonical' : '', (l.kind === 'archived' || l.deleted_at) ? 'dim' : ''].join(' ') },
-        h('td', {}, pad2(l.position), l.id === s.head_line_id ? ' ◀' : ''),
+        h('td', {}, pad2(l.position), l.id === s.head_line_id ? ' ◀\uFE0E' : ''),
         h('td', { class: 'kind' }, KIND[l.kind] ?? l.kind, l.conflict_status && l.conflict_status !== 'open' ? ` (${l.conflict_status === 'promoted' ? '승격' : '무시'})` : '', l.deleted_at ? ' [숨김]' : ''),
         h('td', {}, h('span', { class: 'text', style: 'font-size:15px;line-height:22px' }, l.text), l.original_text ? h('div', { class: 'muted' }, `원래: ${l.original_text}`) : null),
         h('td', {}, person(l.author_name, l.student_id)),

@@ -1,7 +1,7 @@
 // 낭독회: a finished story read back one line at a time, one character at a time,
 // in a little beep voice (a different pitch per writer, never their name).
 import * as api from '../api.js';
-import { h, errorText } from '../ui.js';
+import { h, icon, errorText } from '../ui.js';
 import { on, reduceMotion } from '../extras/extras.js';
 import { voice as lineVoice, play } from '../extras/sound.js';
 import { seal } from '../extras/stamps.js';
@@ -20,9 +20,9 @@ export function readingView(app, storyId) {
   const end = h('div', { class: 'read-end', hidden: true });
   const stage = h('div', { class: 'read-stage' }, prev, h('div', { class: 'read-row' }, num, cur), said, end);
   const segs = h('div', { class: 'read-segs', 'aria-hidden': 'true' });
-  const playBtn = h('button', { type: 'button', class: 'btn read-play', onclick: toggle, 'aria-label': '재생' }, '▶');
-  const prevBtn = h('button', { type: 'button', class: 'btn', onclick: () => go(idx - 1), 'aria-label': '이전 줄' }, '⏮');
-  const nextBtn = h('button', { type: 'button', class: 'btn', onclick: () => go(idx + 1), 'aria-label': '다음 줄' }, '⏭');
+  const playBtn = h('button', { type: 'button', class: 'btn read-play', onclick: toggle, 'aria-label': '재생' }, icon('play', 14));
+  const prevBtn = h('button', { type: 'button', class: 'btn', onclick: () => go(idx - 1), 'aria-label': '이전 줄' }, icon('prev', 14));
+  const nextBtn = h('button', { type: 'button', class: 'btn', onclick: () => go(idx + 1), 'aria-label': '다음 줄' }, icon('next', 14));
   const bars = h('span', { class: 'read-bars', 'aria-hidden': 'true' }, Array.from({ length: 6 }, () => h('i')));
   const voiceBtn = on('reading_voice')
     ? h('button', { type: 'button', class: 'btn-link', 'aria-pressed': 'true', onclick: () => { voice = !voice; voiceBtn.textContent = voice ? '목소리 켬' : '목소리 끔'; voiceBtn.setAttribute('aria-pressed', String(voice)); } }, '목소리 켬')
@@ -74,7 +74,7 @@ export function readingView(app, storyId) {
   }
   function finish() {
     playing = false;
-    playBtn.textContent = '▶'; playBtn.setAttribute('aria-label', '처음부터 다시');
+    playBtn.replaceChildren(icon('play', 14)); playBtn.setAttribute('aria-label', '처음부터 다시');
     prev.textContent = lines.at(-1)?.text ?? '';
     num.textContent = '';
     cur.textContent = '끝.';
@@ -88,13 +88,15 @@ export function readingView(app, storyId) {
     if (idx >= lines.length) { playing = true; show(0); }
     else if (playing) { playing = false; stopTyping(); cur.textContent = lines[idx].text; }
     else { playing = true; show(idx); }
-    playBtn.textContent = playing ? '❚❚' : '▶';
+    playBtn.replaceChildren(icon(playing ? 'pause' : 'play', 14));
     playBtn.setAttribute('aria-label', playing ? '멈춤' : '재생');
   }
   function go(i) {
     if (!lines.length) return;
     show(Math.max(0, Math.min(i, lines.length - 1)), { type: playing });
   }
+  // a hidden tab pauses the reading (it would otherwise go on reading to nobody)
+  function onHide() { if (document.hidden && playing) toggle(); }
   function onKey(e) {
     if (!body.isConnected && !stage.isConnected) return;
     if (!stage.closest('.win')?.classList.contains('is-active')) return;
@@ -110,6 +112,7 @@ export function readingView(app, storyId) {
     size: { w: 680, h: 520 }, minSize: { w: 420, h: 380 }, origin: { x: 300, y: 70 },
     async mount() {
       addEventListener('keydown', onKey);
+      document.addEventListener('visibilitychange', onHide);
       try {
         story = await api.getStory(storyId);
         lines = story.lines.filter(l => !l.removed);
@@ -118,11 +121,11 @@ export function readingView(app, storyId) {
         idx = 0; drawSegs();
         prev.textContent = '';
         num.textContent = '';
-        cur.textContent = lines.length ? '▶를 누르면 시작해요' : '아직 줄이 없어요.';
+        cur.textContent = lines.length ? '재생 단추를 누르면 시작해요' : '아직 줄이 없어요.';
       } catch (e) {
         msg.replaceChildren(h('div', { class: 'notice bad', style: 'margin:10px 14px 0' }, errorText(e)));
       }
     },
-    unmount() { stopTyping(); playing = false; removeEventListener('keydown', onKey); },
+    unmount() { stopTyping(); playing = false; removeEventListener('keydown', onKey); document.removeEventListener('visibilitychange', onHide); },
   };
 }

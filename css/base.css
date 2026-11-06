@@ -36,6 +36,7 @@ body {
   font: 12px/1.5 var(--ui);
   -webkit-font-smoothing: none; -moz-osx-font-smoothing: unset;
   -webkit-text-size-adjust: 100%;
+  font-variant-emoji: text;          /* ▶ ♥ and friends stay pixel text, not colour emoji, on phones */
 }
 a { color: inherit; }
 button, input, textarea, select { font: inherit; color: inherit; }

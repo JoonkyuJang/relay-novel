@@ -301,6 +301,7 @@ initSaver(app, wm, cat);
 initFun(app, wm, { cat, clockEl });
 initTicker();
 bus.on('theme', () => renderMenubar());
+bus.on('sound', () => renderMenubar());          // e.g. sound turned itself off after a long time away
 loadSettings();
 api.watch(['settings'], loadSettings);
 

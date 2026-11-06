@@ -18,6 +18,8 @@ export function initSaver(app, wm, cat) {
   let pool = null, poolAt = 0;
 
   const stop = () => { loops.forEach(t => { clearTimeout(t); clearInterval(t); }); loops = []; };
+  // one-shot timers forget themselves when they fire, so a screen saver left on all night keeps no backlog
+  const after = (fn, ms) => { const t = setTimeout(() => { loops = loops.filter(x => x !== t); fn(); }, ms); loops.push(t); };
 
   function blocked() {
     if (document.hidden || !api.hasEntered()) return true;
@@ -121,8 +123,8 @@ export function initSaver(app, wm, cat) {
       let i = 0;
       const t = setInterval(() => {
         if (i >= chars.length) {
-          clearInterval(t); meta.hidden = false;
-          loops.push(setTimeout(() => { box.classList.add('fade'); loops.push(setTimeout(next, 900)); }, 4500));
+          clearInterval(t); loops = loops.filter(x => x !== t); meta.hidden = false;
+          after(() => { box.classList.add('fade'); after(next, 900); }, 4500);
           return;
         }
         text.textContent += chars[i++];

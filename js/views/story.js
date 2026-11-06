@@ -246,7 +246,7 @@ export function storyView(app, storyId) {
         ? '마지막 줄을 썼어요. 이야기가 완결됐어요!'
         : `${story.line_count}줄로 완결된 이야기예요. 함께 써 주셔서 고마워요.`),
       h('div', { class: 'actions', style: 'justify-content:flex-start' },
-        on('reading') ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.go(`/read/${storyId}`) }, '▶ 낭독회 열기') : null,
+        on('reading') ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => app.go(`/read/${storyId}`) }, icon('play', 12), '낭독회 열기') : null,
         h('button', { type: 'button', class: 'btn', onclick: copyLink }, '링크 복사'),
         on('print_sheet') ? h('button', { type: 'button', class: 'btn', onclick: () => printSheets(story) }, '원고지로 인쇄') : null),
     ];

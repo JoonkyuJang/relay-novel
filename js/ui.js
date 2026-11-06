@@ -31,6 +31,11 @@ const ICONS = {
   hourglass: '<path d="M3 1.5h10M3 14.5h10" stroke="currentColor"/><path d="M4.5 1.5h7L8 8l3.5 6.5h-7L8 8z" fill="#FFF9EF" stroke="currentColor"/><path d="M6 13.5h4L8 10.5z" fill="currentColor"/>',
   warn:   '<path d="M8 1.5l6.5 12.5h-13z" fill="#FFF9EF" stroke="currentColor"/><path d="M7.5 6h1v4h-1zM7.5 11h1v1h-1z" fill="currentColor" stroke="currentColor"/>',
   disk:   '<path d="M2.5 2.5h8l3 3v8h-11z" fill="#FFF9EF" stroke="currentColor"/><path d="M5 5h5v3H5z" fill="currentColor"/><path d="M4.5 10.5h7" stroke="currentColor"/>',
+  // media buttons (phones would turn ▶ ⏮ ⏭ into colour emoji)
+  play:   '<path d="M3 2h2v1h2v1h2v1h2v1h2v4h-2v1h-2v1H7v1H5v1H3z" fill="currentColor"/>',
+  pause:  '<path d="M3 2h4v12H3zM9 2h4v12H9z" fill="currentColor"/>',
+  prev:   '<path d="M2 2h2v12H2zM14 2h-2v1h-2v1H8v1H6v1H5v4h1v1h2v1h2v1h2v1h2z" fill="currentColor"/>',
+  next:   '<path d="M12 2h2v12h-2zM2 2h2v1h2v1h2v1h2v1h1v4h-1v1H8v1H6v1H4v1H2z" fill="currentColor"/>',
 };
 export function icon(name, size = 16) {
   const t = document.createElement('template');

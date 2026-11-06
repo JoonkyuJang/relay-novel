@@ -433,6 +433,16 @@ await step('mobile first visit: boot + login fit on screen', async () => {
   const vp = m.viewportSize();
   assert.ok(box.y + box.height <= vp.height, 'login window fits');
   await m.screenshot({ path: `${SHOTS}/11-mobile-login.png` });
+  // entering brings the dock up: the cat must sit on it right away (it used to stay below until a reload)
+  await m.fill('#lg-name', '새사람');
+  await m.fill('#lg-sid', '2026100777');
+  await m.click('text=들어가기');
+  await m.waitForSelector('.win[data-key="stories"]');
+  await m.waitForTimeout(600);
+  const cat = await m.locator('.cat').boundingBox();
+  const dock = await m.locator('.dock').boundingBox();
+  assert.ok(cat && cat.height > 0, 'the cat is shown');
+  assert.ok(cat.y + cat.height <= dock.y + 4 && cat.y > dock.y - 80, `the cat sits on the dock (cat ${cat.y}..${cat.y + cat.height}, dock ${dock.y})`);
 });
 
 async function adminLogin(p) {
@@ -567,7 +577,7 @@ await step('낭독회: plays every line in the beep voice and ends with the seal
   await p.goto(`${BASE}/#/story/${doneId}`);
   const storyId = doneId;
   const w = win(p, `story:${storyId}`);
-  await w.locator('text=▶ 낭독회 열기').click();
+  await w.locator('text=낭독회 열기').click();
   const r = win(p, `read:${storyId}`);
   await r.locator('select[aria-label="빠르기"]').selectOption('2');
   await r.locator('select[aria-label="줄 사이"]').selectOption('1000');
@@ -818,7 +828,7 @@ await step('mobile tour: drawer cards, finished story, 낭독회, help, about, m
   await win(p, `story:${id}`).locator('.record summary').click();
   await win(p, `story:${id}`).locator('.win-scroll').evaluate(el => { el.scrollTop = el.scrollHeight; });
   await shot('02-record-open');
-  await win(p, `story:${id}`).locator('text=▶ 낭독회 열기').click();
+  await win(p, `story:${id}`).locator('text=낭독회 열기').click();
   const r = win(p, `read:${id}`);
   await r.locator('select[aria-label="빠르기"]').selectOption('2');
   await r.locator('button[aria-label="재생"]').click();
@@ -1055,6 +1065,26 @@ await step('little touches: 학생회관, zoom outlines, "no" shake, type-in lin
   await win(p, 'stories').waitFor();
   await p.waitForFunction(() => document.body.classList.contains('season-winter'));
   await pool.query(`update app.settings set extras = extras - 'snow_from'`);
+});
+
+await step('sound turns itself off 5 minutes after the last screen saver; a note offers to turn it back on', async () => {
+  const p = await newUser('졸음', '2026100815');
+  await p.clock.install();
+  await p.addInitScript(() => { localStorage.setItem('rn.sound', '1'); });
+  await p.goto(`${BASE}/`);
+  await win(p, 'stories').waitFor();
+  assert.equal(await p.locator('.sound-btn').getAttribute('aria-pressed'), 'true');
+  await p.clock.runFor(14 * 60e3);                    // savers end at 10 min (고양이 낮잠): still on at 14
+  assert.equal(await p.evaluate(() => localStorage.getItem('rn.sound')), '1', 'still on at 14 min');
+  await p.clock.runFor(2 * 60e3);
+  assert.equal(await p.evaluate(() => localStorage.getItem('rn.sound')), '0', 'sound off after 15 min away');
+  await p.keyboard.press('Shift');                    // wakes the screen saver (swallowed) and says "I'm back"
+  await p.locator('.doze-note >> text=오래 자리를 비워서 소리를 껐어요.').waitFor();
+  await p.clock.runFor(500);                          // (the waking key's click guard lasts 0.4 s)
+  assert.equal(await p.locator('.sound-btn').getAttribute('aria-pressed'), 'false');
+  await p.locator('.doze-note button:text-is("다시 켜기")').click();
+  assert.equal(await p.evaluate(() => localStorage.getItem('rn.sound')), '1', 'turned back on');
+  assert.equal(await p.locator('.sound-btn').getAttribute('aria-pressed'), 'true');
 });
 
 // Last on purpose: it wipes the database.

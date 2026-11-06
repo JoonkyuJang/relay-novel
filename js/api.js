@@ -32,6 +32,9 @@ function toApiError(error) {
 // so the pixel cursor can show its hourglass; background refreshes never do.
 let lastGesture = 0, waiting = 0, busyT = null;
 for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { lastGesture = Date.now(); }, { capture: true, passive: true });
+// …and whether anyone has been around lately at all (see the sweep below)
+let lastSeen = Date.now();
+for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) addEventListener(ev, () => { lastSeen = Date.now(); }, { capture: true, passive: true });
 function busy(d) {
   waiting += d;
   clearTimeout(busyT);
@@ -274,7 +277,8 @@ function ensureChannel() {
   setInterval(() => {
     if (document.hidden) return;
     n++;
-    if (n % (SWEEP_MS / POLL_MS) === 0) { subscribers.forEach(s => notify(s, 3000)); return; }
+    // the full sweep only while someone is around (a tab left open overnight keeps just the tiny version check)
+    if (n % (SWEEP_MS / POLL_MS) === 0) { if (Date.now() - lastSeen < 15 * 60e3) subscribers.forEach(s => notify(s, 3000)); return; }
     if (!live || n % 3 === 0) checkVersions();
   }, POLL_MS);
   let hiddenAt = 0;

@@ -1,6 +1,6 @@
 // 이야기 서랍: every story, ongoing first.
 import * as api from '../api.js';
-import { h, relTime, errorText } from '../ui.js';
+import { h, icon, relTime, errorText } from '../ui.js';
 import { on, manuscript } from '../extras/extras.js';
 import { seal, stampSvg, KINDS, NAMES } from '../extras/stamps.js';
 
@@ -45,7 +45,7 @@ export function storiesView(app) {
         h('div', { class: 'done-card-row' },
           info && on('stamps') ? KINDS.map(k => h('span', { class: 'tot', role: 'img', title: NAMES[k], 'aria-label': `${NAMES[k]} ${info.stamps?.[k] ?? 0}개` }, stampSvg(k, { size: 18 }), h('span', { 'aria-hidden': 'true' }, info.stamps?.[k] ?? 0))) : null,
           h('span', { style: 'flex:1' }),
-          on('reading') ? h('a', { href: `#/read/${s.id}`, class: 'btn btn-sm' }, '▶ 낭독회') : null)),
+          on('reading') ? h('a', { href: `#/read/${s.id}`, class: 'btn btn-sm' }, icon('play', 10), '낭독회') : null)),
       h('a', { href: `#/story/${s.id}`, class: 'done-card-seal', tabindex: '-1', 'aria-hidden': 'true' }, seal(78, -7)));
   }
 

@@ -228,7 +228,7 @@ export function initCat(app, wm, desktop) {
     setFrame('happy');
     if (!reduceMotion()) { el.classList.remove('squish'); void el.offsetWidth; el.classList.add('squish'); }
     play(wasNap ? 'purr' : 'meow');
-    float('♥');
+    float('♥\uFE0E');
     let n = null;
     try { n = Number(await api.petCat()); } catch { /* still a happy cat */ }
     const counted = n && on('cat_pet_count');
@@ -236,7 +236,7 @@ export function initCat(app, wm, desktop) {
       setFrame('wink');
       play('chime');
       say(['야옹~', h('br'), h('small', {}, `(${n.toLocaleString('ko-KR')}번째!)`)], 3200, 'rare');
-      float('✦', 'spark'); later(() => float('✦', 'spark'), 300); later(() => float('♥'), 600);
+      float('✦', 'spark'); later(() => float('✦', 'spark'), 300); later(() => float('♥\uFE0E'), 600);
     } else {
       say(counted ? ['야옹!', h('br'), h('small', {}, `(${n.toLocaleString('ko-KR')})`)] : '야옹!', 2000);
     }
@@ -382,7 +382,16 @@ export function initCat(app, wm, desktop) {
     flip = isPhone();
     sit();
   }
-  addEventListener('resize', () => { if (state !== 'nap') home(); });
+  // the desktop changes size without a window resize too: entering the site on a phone (the dock
+  // appears), the keyboard, the admin hiding the dock… — re-home the cat whenever it does
+  let lastSize = '', homeT = null;
+  new ResizeObserver(() => {
+    const size = `${desktop.clientWidth}x${desktop.clientHeight}`;
+    if (size === lastSize) return;
+    lastSize = size;
+    clearTimeout(homeT);
+    homeT = setTimeout(() => { if (state !== 'nap' && state !== 'away') home(); }, 120);
+  }).observe(desktop);
   bus.on('settings', home);
   bus.on('theme', () => api_.refresh());
   bus.on('story-completed', () => api_.jump());
