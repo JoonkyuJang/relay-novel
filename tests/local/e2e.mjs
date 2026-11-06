@@ -1024,7 +1024,7 @@ await step('little touches: 학생회관, zoom outlines, "no" shake, type-in lin
   for (const c of ['fx-press', 'fx-cursor', 'season-autumn', 'phase-night']) assert.ok(cls.includes(c), `${c} in ${cls}`);
   // 휴지통 explains its number in a hover box
   await p.hover('.icon.trash');
-  await p.locator('.hover-tip >> text=한 글자도 올리지 않고 놓은 횟수').waitFor();
+  await p.locator('.hover-tip >> text=끝내 올리지 않고 놓은 횟수').waitFor();
   await p.screenshot({ path: `${SHOTS}/31-trash-tip.png` });
   await p.mouse.move(600, 400);
   await p.locator('.hover-tip').waitFor({ state: 'detached' });

@@ -198,7 +198,7 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
   let trashCount = 0;
   hoverTip(trashIcon, () => [
     h('b', {}, `휴지통 · ${trashCount.toLocaleString('ko-KR')}`),
-    h('span', {}, "'이어 쓰기'로 줄을 맡았다가 한 글자도 올리지 않고 놓은 횟수예요. 취소했거나 시간이 다 되어 자리가 넘어간 경우가 여기 모여요."),
+    h('span', {}, "'이어 쓰기'로 줄을 맡았다가 끝내 올리지 않고 놓은 횟수예요. 쓰던 중에 취소했든, 시간이 다 되어 자리가 넘어갔든 올리지 않았으면 여기 모여요."),
     h('span', { class: 'faint' }, '누가 놓았는지는 남기지 않아요.'),
   ]);
   trashIcon.addEventListener('dblclick', () => bus.emit('trash-dblclick', { el: trashIcon }));
