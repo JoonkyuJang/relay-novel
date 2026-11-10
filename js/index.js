@@ -405,6 +405,23 @@ initTabIcon(wm);
 const updates = initUpdateCheck();
 window.__rnCheckUpdate = () => updates?.check();    // (tests)
 bus.on('theme', () => renderMenubar());
+// switches that change windows already open: 창 접어 두기 / 창 말아 올리기 off → bring folded windows back
+bus.on('settings', () => {
+  document.body.classList.toggle('no-minimize', !on('minimize'));
+  for (const w of wm.wins()) {
+    if (!on('minimize') && w.minimized) wm.restore(w.key);
+    if (!on('window_shade') && wm.isShaded(w.key)) wm.shade(w.key);
+  }
+});
+// the deadline passing while the page is open (결산 icon and link, writing closing) acts like a settings change
+let wasOver = deadlineOver();
+setInterval(() => {
+  if (deadlineOver() === wasOver) return;
+  wasOver = !wasOver;
+  bus.emit('settings', {});
+  renderMenubar(); renderNav();
+  forEachView(v => v.onSettings?.());
+}, 20e3);
 bus.on('sound', () => renderMenubar());          // e.g. sound turned itself off after a long time away
 api.watch(['proposals'], () => { loadBadge(); if (hadWaiting) { adoptChecked = false; checkAdopted(); } });
 loadSettings();

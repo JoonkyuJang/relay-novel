@@ -759,3 +759,5 @@ fieldset.set-group legend { padding: 0 6px; font-weight: 700; }
 @media (max-width: 767px) { .menubar .guest-login { min-height: 30px !important; } }
 /* the narrowest phones (iPhone SE · 320px): the logo keeps its diamond, so 로그인하기 / 로그아웃 and the speaker all fit */
 @media (max-width: 359px) { .menubar .logo span { display: none; } .menubar { gap: 8px; padding: 0 8px; } }
+
+body.no-minimize .win-min { display: none; }

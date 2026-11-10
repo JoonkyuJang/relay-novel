@@ -36,7 +36,9 @@ export function storyView(app, storyId) {
   let unwatch = null, ticker = null, typing = null, ro = null;
   let closed = false, claiming = false, linesSig = null;
   let blocker = null, lastBlockerSig = 'null';          // why I can't write here (write_check), shown before pressing 이어 쓰기
-  let gridMode = api.prefs.get('gridbox') == null ? !!X('grid_box_default') : api.prefs.get('gridbox') === '1';
+  // (read when the box is drawn: the admin's default may arrive, or change, after this window opened)
+  let gridPick = api.prefs.get('gridbox');
+  const gridMode = () => (gridPick == null ? !!X('grid_box_default') : gridPick === '1');
   const serverNow = () => Date.now() + clockOffset;
 
   const bar = h('div', { class: 'win-bar' });
@@ -73,7 +75,11 @@ export function storyView(app, storyId) {
     },
     onFocus() { if (story && mode === 'idle') renderFoot(); },
     // never rebuild the writing box (it would drop the IME composition and close the phone keyboard)
-    onSettings() { if (!story) return; linesSig = null; if (mode === 'writing') { renderBar(); renderLines(); } else renderAll(); },
+    onSettings() {
+      // 누군가 쓰는 중 (n자): join or leave the live count when the switch flips
+      if (on('typing_count') && !typing && !closed) typing = api.typingChannel(storyId, (n) => { othersTyping = n; showTyping(); });
+      else if (!on('typing_count') && typing) { typing.close(); typing = null; othersTyping = null; }
+      if (!story) return; linesSig = null; if (mode === 'writing') { renderBar(); renderLines(); } else renderAll(); },
     unmount() {
       closed = true;
       unwatch?.(); clearInterval(ticker); typing?.close(); ro?.disconnect();
@@ -395,8 +401,8 @@ export function storyView(app, storyId) {
     });
     update();
     setTimeout(() => ta.focus({ preventScroll: true }));
-    const toggleGrid = h('button', { type: 'button', class: 'btn-link', onclick: () => { gridMode = !gridMode; api.prefs.set('gridbox', gridMode ? '1' : '0'); renderFoot(); } },
-      gridMode ? '보통 칸으로' : '원고지 칸으로');
+    const toggleGrid = h('button', { type: 'button', class: 'btn-link', onclick: () => { gridPick = gridMode() ? '0' : '1'; api.prefs.set('gridbox', gridPick); renderFoot(); } },
+      gridMode() ? '보통 칸으로' : '원고지 칸으로');
     return [
       baton.is_final ? h('div', { class: 'notice warn', style: 'display:flex;gap:10px;align-items:center' }, icon('warn', 20),
         h('span', {}, `이 줄이 이야기의 마지막 줄이에요. ${story.max_lines}줄의 끝을 맺어 주세요.`)) : null,
@@ -405,7 +411,7 @@ export function storyView(app, storyId) {
       h('div', { 'data-warnings': '', role: 'status' }),
       h('div', { class: 'label' }, h('span', { class: 'label-row' }, h('span', {}, h('label', { for: ta.id }, '내 줄'), ' ', toggleGrid),
         counter)),
-      gridMode ? gridBox(ta, baton.max_chars) : ta,
+      gridMode() ? gridBox(ta, baton.max_chars) : ta,
       h('span', { class: 'faint compose-hint', id: `hint-${storyId}` }, 'Enter를 누르면 바로 올라가요. 올린 뒤에는 고칠 수 없어요.'),
       message ? noticeBad() : null,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: cancel }, '취소'), submitBtn),

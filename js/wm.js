@@ -168,7 +168,8 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
         view.closable === false ? h('span', { class: 'win-title-pad' })
           : h('button', { type: 'button', class: 'win-close', 'aria-label': `${view.title} 닫기`, onclick: () => close(key) }),
         titleEl,
-        view.closable === false || view.minimizable === false || !canMinimize()
+        // (the _ button is always there for windows that can fold; the 창 접어 두기 switch hides it via a body class)
+        view.closable === false || view.minimizable === false
           ? h('span', { class: 'win-title-pad' })
           : h('button', { type: 'button', class: 'win-min', 'aria-label': `${view.title} 접어 두기`, title: '접어 두기', onclick: () => minimize(key) })),
       h('div', { class: 'win-body' }, view.body));
@@ -198,7 +199,7 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
   // 접어 두기: hide the window and park a button in the tray.
   function minimize(key) {
     const win = wins.get(key);
-    if (!win || win.minimized || !tray || isPhone()) return;
+    if (!win || win.minimized || !tray || isPhone() || !canMinimize()) return;
     closeProps();
     const from = win.el.getBoundingClientRect();
     win.minimized = true;
