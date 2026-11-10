@@ -657,7 +657,7 @@ await test('건의함: propose, ♥ (not my own), cap per person, withdraw, 채�
   assert.deepEqual(await rpc('vote_proposal', { p_id: a.proposal_id, ...who(9501) }), { liked: true, likes: 1 });
   await rpc('vote_proposal', { p_id: a.proposal_id, ...who(9502) });
   assert.deepEqual(await rpc('vote_proposal', { p_id: a.proposal_id, ...who(9502) }), { liked: false, likes: 1 });
-  await expectErr(rpc('vote_proposal', { p_id: a.proposal_id, ...who(9501), p_name: '다른이름' }), 'not_your_stamp');
+  await expectErr(rpc('vote_proposal', { p_id: a.proposal_id, ...who(9501), p_name: '다른이름' }), 'not_your_vote');
   box = await rpc('list_proposals', { p_student_id: '2026009501' });
   assert.equal(box.items.find(x => x.id === a.proposal_id).liked, true);
   // ♥ counts can be hidden from everyone but admins
@@ -704,6 +704,10 @@ await test('건의함: propose, ♥ (not my own), cap per person, withdraw, 채�
   await admin('admin_update_settings', { p: { extras: { flood_stories: 0 } } });
   await P(9601);
   await admin('admin_update_settings', { p: { extras: { flood_stories: 60 } } });
+  // ♥ (and 도장) share the 새 줄 cap
+  await admin('admin_update_settings', { p: { extras: { flood_lines: 1 } } });
+  await expectErr(rpc('vote_proposal', { p_id: c.proposal_id, ...who(9610) }), 'rate_limited');
+  await admin('admin_update_settings', { p: { extras: { flood_lines: 300 } } });
   // 초기화 + 백업
   const ex = await admin('admin_export');
   assert.ok(ex.proposals.length >= 3 && ex.proposal_votes.length === 1);

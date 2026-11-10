@@ -1,0 +1,5 @@
+# Netlify: publish the repo root as-is; the one "build" step re-stamps index.html with content hashes
+# (tools/version.mjs), so a deploy can never ship files that are newer than their ?v= stamps.
+[build]
+  publish = "."
+  command = "node tools/version.mjs"

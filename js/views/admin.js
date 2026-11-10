@@ -42,7 +42,7 @@ const SETTING_GROUPS = [
     ['x:proposals_close_at_deadline', '마감이 지나면 건의 닫기', 'checkbox', "'마감이 지나면 글쓰기 닫기'와 따로"],
   ]],
   ['넘침 막기 · 사이트 전체, 1분에', [
-    ['x:flood_lines', '새 줄', 'number', '0이면 제한 없음'],
+    ['x:flood_lines', '새 줄 · 도장 · ♥', 'number', '각각 따로 세요 · 0이면 제한 없음'],
     ['x:flood_stories', '새 이야기 · 건의', 'number', '0이면 제한 없음'],
     ['x:flood_guestbook', '방명록', 'number', '0이면 제한 없음'],
   ]],

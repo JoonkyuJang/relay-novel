@@ -733,3 +733,20 @@ fieldset.set-group legend { padding: 0 6px; font-weight: 700; }
   .prop-meta .btn-sm { min-height: 40px; }
   .admin-foot-note { display: none; }
 }
+/* a phone on its side (wide, short): no strip — the dock stops short of the badge, which gets the corner beside it
+   (the login screen keeps the strip: its buttons sit at the bottom right) */
+@media (max-width: 767px) and (min-width: 560px) {
+  body:not(.not-entered) { --floor-h: 0px; }
+  body:not(.not-entered) .dock { right: 206px; border-right: 2px solid var(--ink); }
+  body:not(.not-entered) .floor { left: auto; width: 206px; height: calc(64px + env(safe-area-inset-bottom)); }
+  body:not(.not-entered) .floor-text { display: none; }
+  body:not(.not-entered) .props.sheet { bottom: calc(64px + env(safe-area-inset-bottom)) !important; }
+  body:not(.not-entered):has(.win-foot textarea:focus) .desktop { bottom: calc(64px + env(safe-area-inset-bottom)); }
+}
+/* …and when it's that short, the window gets every pixel: the cat and the phone bin sit this one out */
+@media (max-width: 767px) and (max-height: 420px) {
+  body:not(.not-entered) .cat-layer, body:not(.not-entered) .phone-bin { display: none !important; }
+  body:is(.cat-phone, .bin-phone):not(.not-entered) .win { bottom: 10px; }
+  .win-foot { padding: 6px 12px 8px; gap: 4px; }
+  .win-foot .btn { min-height: 38px; }
+}

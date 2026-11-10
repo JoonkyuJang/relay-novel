@@ -4,7 +4,7 @@
 // others' new lines typing themselves in, 절반 · 마지막 한 줄 milestones.
 import * as api from '../api.js';
 import { h, icon, fmtTime, fmtCountdown, errorText, attachReveal } from '../ui.js';
-import { on, fun, bus, X, manuscript, reduceMotion, deadlinePassed } from '../extras/extras.js';
+import { on, fun, bus, X, reduceMotion, deadlinePassed } from '../extras/extras.js';
 import { fillPad, stampButtons, updateTicks, seal } from '../extras/stamps.js';
 import { relayRecord, recordView, gridIcon } from '../extras/record.js';
 import { play } from '../extras/sound.js';
@@ -66,6 +66,7 @@ export function storyView(app, storyId) {
       unwatch = api.watch([storyId], refresh);
       ticker = setInterval(tick, 1000);
       addEventListener('pagehide', onPageHide);
+      addEventListener('pageshow', onPageShow);
       if (on('typing_count')) typing = api.typingChannel(storyId, (n) => { othersTyping = n; showTyping(); });
       ro = new ResizeObserver(() => placeTicks());
       ro.observe(scroll);
@@ -77,6 +78,7 @@ export function storyView(app, storyId) {
       closed = true;
       unwatch?.(); clearInterval(ticker); typing?.close(); ro?.disconnect();
       removeEventListener('pagehide', onPageHide);
+      removeEventListener('pageshow', onPageShow);
       if (baton) {
         // closing the window mid-line lets the line go too: the box still gets crumpled into the bin
         iDropped();
@@ -87,6 +89,23 @@ export function storyView(app, storyId) {
   };
 
   function onPageHide() { if (baton) api.releaseBatonOnUnload(storyId, baton.token); }
+  // back from the browser's page cache (the back button, a phone browser restoring the tab): leaving let
+  // the reserved turn go — take it again if it's still free, else say so (the draft is kept either way)
+  async function onPageShow(e) {
+    if (!e.persisted || !baton || submitting) return;
+    try {
+      const b = await api.claimBaton(storyId, app.identity());
+      if (closed || !baton) { api.releaseBaton(storyId, b.token).catch(() => {}); return; }
+      baton = b;
+      clockOffset = Date.parse(b.server_now) - Date.now();
+      tick();
+    } catch (err) {
+      baton = null; mode = 'idle'; lastResult = null;
+      refused(errorText(err));
+      renderAll();
+    }
+    refresh();
+  }
 
   // ---------------------------------------------------------- rendering
 

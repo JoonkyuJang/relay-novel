@@ -68,6 +68,7 @@ export function proposalsView(app) {
         try {
           const r = await api.voteProposal(p.id, ident);
           p.liked = r.liked; if (p.likes != null) p.likes = r.likes;
+          if (note?.kind === 'bad') note = null;                         // (an old error goes once something works)
           play(r.liked ? 'stamp' : 'select');
           draw();
         } catch (err) { btn.disabled = false; flash(errorText(err)); }
@@ -138,7 +139,8 @@ export function proposalsView(app) {
       footBtn.textContent = '새 이야기 건의하기';
       footBtn.className = 'btn btn-primary';
     }
-    if (note?.id) requestAnimationFrame(() => scroll.querySelector(`[data-id="${note.id}"]`)?.scrollIntoView({ block: 'nearest' }));
+    // (bring my new proposal into view once — later refreshes, e.g. someone's ♥, leave the scroll alone)
+    if (note?.id && !note.scrolled) { note.scrolled = true; requestAnimationFrame(() => scroll.querySelector(`[data-id="${note.id}"]`)?.scrollIntoView({ block: 'nearest' })); }
   }
 
   function flash(text) {
@@ -183,7 +185,7 @@ export function proposalsView(app) {
       if (wasAdmin !== app.admin) { wasAdmin = app.admin; confirming = null; }
       refresh();
     },
-    onSettings: refresh,
+    onSettings() { if (!on('proposals')) app.close('proposals'); else refresh(); },
     unmount() { unwatch?.(); },
   };
 }

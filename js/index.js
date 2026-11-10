@@ -263,6 +263,9 @@ function logout() {
   api.logout();
   if (app.admin) { app.admin = false; api.signOut().catch(() => {}); }   // one 로그아웃 ends everything
   pending = null;
+  adoptChecked = false; hadWaiting = false;     // (the next person gets their own 채택 note)
+  document.querySelector('.adopt-note')?.remove();
+  loadBadge();
   for (const k of wm.keys()) wm.close(k);      // also releases any reserved turn
   history.replaceState(null, '', location.pathname + location.search);
   renderMenubar();
@@ -306,15 +309,19 @@ function drawBadge() {
   }
 }
 
-// once, the first time the proposer comes back after an admin 채택s their story
-let adoptChecked = false;
+// once, the first time the proposer comes back after an admin 채택s their story — or right away, if they're
+// here when it happens (only people with a waiting proposal look again on a 건의함 change)
+let adoptChecked = false, hadWaiting = false;
 async function checkAdopted() {
   const ident = api.getIdentity();
   if (adoptChecked || !ident || !on('proposals') || !on('proposal_notice')) return;
   adoptChecked = true;
   try {
-    const fresh = (await api.myProposals(ident)).filter(p => p.status === 'adopted' && !p.seen && p.story_id);
+    const mine = await api.myProposals(ident);
+    hadWaiting = mine.some(p => p.status === 'waiting');
+    const fresh = mine.filter(p => p.status === 'adopted' && !p.seen && p.story_id);
     if (!fresh.length) return;
+    document.querySelector('.adopt-note')?.remove();
     const p = fresh[0];
     const close = () => note.remove();
     const note = h('div', { class: 'adopt-note notice ok', role: 'status' },
@@ -396,7 +403,7 @@ const updates = initUpdateCheck();
 window.__rnCheckUpdate = () => updates?.check();    // (tests)
 bus.on('theme', () => renderMenubar());
 bus.on('sound', () => renderMenubar());          // e.g. sound turned itself off after a long time away
-api.watch(['proposals'], loadBadge);
+api.watch(['proposals'], () => { loadBadge(); if (hadWaiting) { adoptChecked = false; checkAdopted(); } });
 loadSettings();
 api.watch(['settings'], loadSettings);
 

@@ -13,7 +13,6 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 
 // colour codes → css class (colours live in extras.css)
 const C = { b: 1, l: 2, w: 3, g: 4, d: 5, p: 6, s: 7, st: 8, t: 9, t2: 10, k: 11, f: 12, fw: 13, gr: 14, pv: 15, sr: 16, fl: 17, gl: 18, m: 19, sn: 20 };
-const NAMES = Object.fromEntries(Object.entries(C).map(([k, v]) => [v, k]));
 
 // tiny deterministic random (same picture every load)
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }

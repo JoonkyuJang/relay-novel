@@ -1,10 +1,10 @@
 # Netlify response headers (GitHub Pages ignores this file).
 # The CSP keeps the site to itself and its Supabase project: no other script, style, font or
-# connection can load, the site can't be framed, and forms can't post elsewhere.
+# connection can load, only the club webzine (oopy.io) may frame it, and forms can't post elsewhere.
 # 'unsafe-inline' scripts stay allowed: index.html's import map (rewritten on every deploy by
 # tools/version.mjs) and Netlify's own badge (an inline-script iframe) need it.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://xuuoyzhksctpzxcylhwe.supabase.co wss://xuuoyzhksctpzxcylhwe.supabase.co; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://xuuoyzhksctpzxcylhwe.supabase.co wss://xuuoyzhksctpzxcylhwe.supabase.co; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://*.oopy.io
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()

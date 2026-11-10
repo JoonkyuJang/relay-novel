@@ -6,7 +6,7 @@
 -- An adopted proposal becomes an ordinary story whose first line stays in the proposer's name.
 -- The master switch `proposals` (on) can turn all of this off: then everyone starts stories as before.
 --
--- Also: the flood-guard caps become settings (0 = no cap), write_check also tells you how many lines
+-- Also: the flood-guard caps become settings (0 = no cap) and also cover ♥ and 도장, write_check also tells you how many lines
 -- you've written in that story (내 줄 1/1), and 초기화 / 백업 know about the 건의함.
 -- =====================================================================
 
@@ -171,6 +171,11 @@ begin
   return new;
 end $$;
 create trigger proposals_flood_guard before insert on app.proposals for each row execute function app.flood_guard();
+-- ♥ and 도장 are toggles anyone can script with invented people too: they share the 새 줄 cap
+create trigger proposal_votes_flood_guard before insert on app.proposal_votes for each row execute function app.flood_guard();
+create trigger stamps_flood_guard before insert on app.stamps for each row execute function app.flood_guard();
+create index if not exists stamps_created_idx on app.stamps (created_at);
+create index if not exists proposal_votes_created_idx on app.proposal_votes (created_at);
 
 -- ---------------------------------------------------------------------
 -- create_story: admins only while the 건의함 is on (admins skip 새 이야기 허용 and the per-person cap)
@@ -316,7 +321,7 @@ begin
 
   select author_name into v_owner from app.proposal_votes where proposal_id = p.id and student_id = v_sid;
   if found then
-    if v_owner is distinct from v_name then perform app.err('not_your_stamp'); end if;   -- same 이름 + 학번, any device
+    if v_owner is distinct from v_name then perform app.err('not_your_vote'); end if;    -- same 이름 + 학번, any device
     delete from app.proposal_votes where proposal_id = p.id and student_id = v_sid;
     v_on := false;
   else

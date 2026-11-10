@@ -1320,6 +1320,7 @@ await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with
   assert.ok(await mine.locator('.like').isDisabled(), 'no ♥ on my own');
   await pw.locator('text=내 건의 1/2 기다리는 중').waitFor();
   await a.screenshot({ path: `${SHOTS}/60-proposals-desktop.png` });
+  const a11y = [...await axe(a, 'desktop 건의함')];
   const pid = (await pool.query(`select id from app.proposals where title = '고양이가 사라진 날'`)).rows[0].id;
   // B (phone): the dock has 건의함; the floor strip lies under it; ♥ toggles
   await pool.query(`select public.propose_story('시험 전날 밤', '새벽 세 시, 도서관 열람실 불이 하나만 켜져 있었다.', '하늘', '2026300009', 'c9')`);
@@ -1336,6 +1337,7 @@ await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with
   await like.tap();
   await bw.locator(`.prop-card[data-id="${pid}"] .like[aria-pressed="true"]:has-text("1")`).waitFor();
   await b.screenshot({ path: `${SHOTS}/61-proposals-phone.png` });
+  a11y.push(...await axe(b, 'phone 건의함'));
   // admin: 반려 (asks once) and 채택… with an edited title
   const ad = await newUser('운영진2', null, { entered: false });
   await adminLogin(ad);
@@ -1355,6 +1357,9 @@ await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with
   await dlg.locator('#ad-title').fill('고양이가 사라진 날에');
   await dlg.locator('text=고친 곳: 제목').waitFor();
   await ad.screenshot({ path: `${SHOTS}/62-adopt-dialog.png` });
+  a11y.push(...await axe(ad, '채택하기 dialog'));
+  if (a11y.length) console.log(a11y.join('\n'));
+  assert.deepEqual(a11y, [], 'no serious axe-core problems in the 건의함');
   await dlg.locator('button:text-is("채택하고 서랍에 올리기")').click();
   await aw.locator('text=채택했어요').waitFor();
   const st = (await pool.query(`select s.id, s.title, l.author_name from app.stories s join app.lines l on l.id = s.head_line_id where s.title = '고양이가 사라진 날에'`)).rows[0];

@@ -249,7 +249,6 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
     ].filter(Boolean).filter((x, i, a) => !(x === '-' && (i === 0 || a[i - 1] === '-' || i === a.length - 1)));
   }
   function lineItems(li) {
-    const id = li.dataset.id;
     const win = li.closest('.win');
     const storyId = win?.dataset.key?.replace(/^story:/, '');
     const text = li.querySelector('.line-text')?.firstChild?.textContent ?? '';
@@ -260,7 +259,6 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
       on('memo') ? '-' : null,
       on('memo') ? ['메모장에 옮겨 적기', () => { app.go('/memo'); setTimeout(() => wm.get('memo')?.view.append?.(`“${text}”`), 50); }] : null,
     ].filter(Boolean);
-    void id;
   }
   function titleItems(win) {
     const key = win.dataset.key, w = wm.get(key);
