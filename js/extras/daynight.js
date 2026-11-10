@@ -79,12 +79,20 @@ function orbPlace(phase) {
   return { x: 8 + n * 84, y: 70 - Math.sin(n * Math.PI) * 62 };
 }
 
-export function applySky() {
+// The sky drifts from one phase to the next over ten minutes when the clock moves it; when someone
+// picks 늘 낮 / 늘 밤 (or the admin flips a switch) it changes right away, in a few pixel steps.
+export function applySky({ quick = false } = {}) {
   const phase = currentPhase();
+  if (quick && sky) {
+    sky.classList.add('quick');
+    clearTimeout(applySky.t);
+    applySky.t = setTimeout(() => sky.classList.remove('quick'), 900);
+  }
   for (const p of PHASES) document.body.classList.toggle(`phase-${p}`, p === phase && on('daynight'));
   if (!sky) return;
   for (const layer of sky.querySelectorAll('.sky-layer')) layer.classList.toggle('on', layer.dataset.phase === phase);
-  const where = orbPlace(phase);
+  // (pinned to 늘 낮 / 늘 밤 at the "wrong" hour: the clock's arc would put the sun on the ground — use a fixed spot)
+  const where = phase === phaseAt() ? orbPlace(phase) : phase === 'night' ? { x: 30, y: 14 } : { x: 68, y: 14 };
   orb.replaceChildren(svgIcon(phase === 'night' ? (on('moon_phase') ? moonPath(moonAge()) : MINI.moon) : SUN, 36));
   orb.dataset.kind = phase === 'night' ? 'moon' : phase;
   orb.style.left = `${where.x}%`; orb.style.top = `${Math.max(6, where.y)}%`;
@@ -102,7 +110,7 @@ export function initDayNight(desktop) {
   applySky();                                   // (before the skyline reads styles: the first sky must not fade in)
   const skyline = initSkyline(sky, currentPhase);
   setInterval(applySky, 60e3);
-  bus.on('settings', applySky);
+  bus.on('settings', () => applySky({ quick: true }));
   return { skyline };
 }
 
@@ -118,7 +126,7 @@ export function phaseButton(onChange) {
     onclick: () => {
       const next = { auto: 'day', day: 'night', night: 'auto' }[mode()];
       prefs.set('daynight', next === 'auto' ? null : next);
-      applySky(); onChange?.();
+      applySky({ quick: true }); onChange?.();
     },
   }, icon);
 }

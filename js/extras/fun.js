@@ -16,7 +16,7 @@ export function initFun(app, wm, { cat, clockEl }) {
   function setAmber(v, { toast = true } = {}) {
     document.body.classList.toggle('amber', v);
     prefs.set('amber', v ? '1' : null);
-    applySky();
+    applySky({ quick: true });
     bus.emit('theme', {});
     if (toast && v) amberToast();
     else document.querySelector('.amber-toast')?.remove();

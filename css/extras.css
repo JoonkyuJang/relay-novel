@@ -159,6 +159,7 @@ a.sticky-src:hover { text-decoration: underline; }
 .desk-sky { position: fixed; inset: var(--menubar-h) 0 0 0; z-index: 0; pointer-events: none; }
 .sky-layer { position: absolute; inset: 0; opacity: 0; transition: opacity 600s linear; }
 .sky-layer.on { opacity: 1; }
+.desk-sky.quick .sky-layer { transition: opacity .6s steps(4); }
 .sky-layer[data-phase="morning"] { background: var(--desk) linear-gradient(to bottom, #FBDCC4 0%, rgba(251,220,196,0) 55%); }
 .sky-layer[data-phase="morning"]::after, .sky-layer[data-phase="dusk"]::after, .sky-layer[data-phase="night"]::after { content: ""; position: absolute; inset: 0; background: radial-gradient(rgba(29,42,68,0.13) 1px, transparent 1.3px) 0 0 / 6px 6px; }
 .sky-layer[data-phase="dusk"] { background: #FBE6D4 linear-gradient(to bottom, #E79A73 0%, #F3C2A1 30%, rgba(251,230,212,0) 75%); }
