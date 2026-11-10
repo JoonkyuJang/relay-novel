@@ -1299,6 +1299,32 @@ await step('more touches: sound on the login screen, coffee rings, patterns, sha
 });
 
 // Last on purpose: it wipes the database.
+await step('guest: a refresh asks again (login over the 서랍, no boot text), 둘러보기 returns to the same window; 로그인하기 in the menu bar', async () => {
+  const g = await newUser('재방문', null, { entered: false });
+  await g.goto(`${BASE}/`);
+  await g.waitForSelector('.win[data-key="login"]');
+  await g.click('text=둘러보기');
+  await win(g, 'stories').waitFor();
+  await g.goto(`${BASE}/#/guestbook`);
+  await win(g, 'guestbook').waitFor();
+  await g.reload();
+  await g.waitForSelector('.win[data-key="login"]');
+  assert.equal(await g.locator('.bootlog').count(), 0, 'no boot text the second time');
+  await win(g, 'stories').waitFor({ state: 'attached' });                          // the 서랍 waits behind it
+  await g.click('text=둘러보기');
+  await win(g, 'guestbook').waitFor();
+  const pill = g.locator('#menubar .guest-login');
+  await pill.waitFor();
+  await pill.click();
+  await g.waitForSelector('.win[data-key="login"]');
+  // admins stay in across a refresh (their session is the login)
+  const ad = await newUser('운영진3', null, { entered: false });
+  await adminLogin(ad);
+  await ad.reload();
+  await win(ad, 'stories').waitFor();
+  assert.equal(await ad.locator('.win[data-key="login"]').count(), 0);
+});
+
 await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with edits → the proposer is told once; 내 줄 n/N', async () => {
   await pool.query(`update app.settings set allow_new_stories = true, extras = extras || '{"proposals": true, "title_required": true}'::jsonb`);
   // A (desktop): no 새 이야기 icon, a 건의함 one; the 서랍 offers 새 이야기 건의하기

@@ -750,3 +750,11 @@ fieldset.set-group legend { padding: 0 6px; font-weight: 700; }
   .win-foot { padding: 6px 12px 8px; gap: 4px; }
   .win-foot .btn { min-height: 38px; }
 }
+
+/* a guest's way back to logging in: a light pill in the dark menu bar (never squeezed off a phone's edge) */
+.menubar .guest-login { flex: none; padding: 2px 8px; background: var(--cream); color: var(--ink); font-weight: 700; }
+.menubar .guest-login:hover { background: var(--stone-bg); }
+.menubar .guest-login .desk-only { font-weight: 400; color: var(--pencil); }
+@media (max-width: 767px) { .menubar .guest-login { min-height: 30px !important; } }
+/* the narrowest phones (iPhone SE · 320px): the logo keeps its diamond, so 로그인하기 / 로그아웃 and the speaker all fit */
+@media (max-width: 359px) { .menubar .logo span { display: none; } .menubar { gap: 8px; padding: 0 8px; } }

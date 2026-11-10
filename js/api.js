@@ -91,6 +91,8 @@ export function setIdentity({ name, studentId }) {
 export function logout() { store.set('rn.name', null); store.set('rn.sid', null); store.set('rn.guest', null); }
 export const isGuest = () => store.get('rn.guest') === '1';
 export const setGuest = () => store.set('rn.guest', '1');
+// 둘러보기 lasts for one visit: the next visit (or a refresh) asks again — log in, or 둘러보기 once more
+export const endGuest = () => store.set('rn.guest', null);
 export const hasEntered = () => !!getIdentity() || isGuest();
 
 export function getDraft(key) { return store.get(`rn.draft.${key}`) ?? ''; }

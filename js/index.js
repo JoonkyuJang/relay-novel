@@ -56,6 +56,7 @@ const app = {
   close: (key) => wm.close(key),
   requireLogin(reason, returnRoute) { pending = returnRoute ?? null; showLogin(reason); },
   afterLogin() {
+    api.prefs.set('visited', '1');
     wm.close('login');
     $('.bootlog')?.remove();
     renderMenubar();
@@ -72,6 +73,7 @@ const app = {
   recapOpen: () => on('recap') && (deadlineOver() || app.admin),
   afterAdminLogin() {
     app.admin = true;
+    api.prefs.set('visited', '1');
     bus.emit('settings', {});                 // (admins see the 결산 icon early)
     if (!api.hasEntered()) api.setGuest();
     wm.close('login');
@@ -251,7 +253,8 @@ function renderMenubar() {
     api.hasEntered()
       ? ident
         ? [on('my_lines') ? h('button', { type: 'button', class: 'menu-name', title: '내가 쓴 줄', onclick: () => app.go('/mine') }, `${ident.name} 님`) : h('span', { class: 'menu-name' }, `${ident.name} 님`), h('button', { type: 'button', onclick: logout }, '로그아웃')]
-        : [h('span', { class: 'muted' }, '손님'), h('button', { type: 'button', onclick: () => app.requireLogin('', currentRoute()) }, '로그인')]
+        : h('button', { type: 'button', class: 'guest-login', title: '둘러보는 중이에요 · 로그인하면 이어 쓰고 도장 · ♥도 남길 수 있어요', onclick: () => app.requireLogin('', currentRoute()) },
+            h('span', { class: 'desk-only' }, '손님 · '), '로그인하기')
       : null,
     soundButton(renderMenubar),
     h('button', { type: 'button', class: 'desk-only', 'aria-pressed': String(app.crt), title: '화면 효과', onclick: () => app.setCrt(!app.crt) }, `CRT ${app.crt ? '켬' : '끔'}`),
@@ -417,10 +420,18 @@ async function checkAdmin() {
 }
 
 await checkAdmin();
+// a guest from an earlier visit (or before this refresh) is asked again: log in, or 둘러보기 once more —
+// and lands back on the same window either way (admins stay in: their session is the login)
+if (api.isGuest() && !api.getIdentity() && !app.admin) { api.endGuest(); renderMenubar(); }
+if (api.hasEntered()) api.prefs.set('visited', '1');
 if (!api.hasEntered()) {
   const route = currentRoute();
   if (route !== '/stories' && route !== '/login') pending = route;
-  runBoot().then(() => showLogin());
+  // the boot text is for the very first visit; after that the login window comes straight up
+  if (api.prefs.get('visited') === '1') {
+    if (!isPhone()) wm.open('stories', () => storiesView(app), { silent: true });   // (the 서랍 waits behind it)
+    showLogin();
+  } else runBoot().then(() => showLogin());
 } else {
   const route = currentRoute();
   openRoute('/stories', { silent: route !== '/stories' });
