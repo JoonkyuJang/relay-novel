@@ -180,6 +180,30 @@ export function postGuestbook(text, { name, studentId }) {
   return call('post_guestbook', { p_text: text, p_name: name, p_student_id: studentId, p_client: clientToken() });
 }
 
+// ---------------------------------------------------------------- 새로운 이야기 건의함
+
+// -> { items: [{ id, title, text, author_name, created_at, likes|null, liked, mine }], my_waiting, closed: code|null }
+export const listProposals = (studentId = null) => call('list_proposals', { p_student_id: studentId });
+export async function proposeStory({ title, text, name, studentId }) {
+  const r = await call('propose_story', {
+    p_title: title ?? null, p_text: text, p_name: name, p_student_id: studentId, p_client: clientToken(),
+  });
+  poke(['proposals']);
+  return r;
+}
+export async function voteProposal(id, { name, studentId }) {
+  const r = await call('vote_proposal', { p_id: id, p_name: name, p_student_id: studentId, p_client: clientToken() });
+  poke(['proposals']);
+  return r;
+}
+export async function withdrawProposal(id, { name, studentId }) {
+  const r = await call('withdraw_proposal', { p_id: id, p_name: name, p_student_id: studentId });
+  poke(['proposals']);
+  return r;
+}
+export const myProposals = ({ name, studentId }) => call('my_proposals', { p_student_id: studentId, p_name: name });
+export const ackProposals = ({ name, studentId }) => call('ack_proposals', { p_student_id: studentId, p_name: name });
+
 // ---------------------------------------------------------------- 부가 기능
 
 export function toggleStamp(lineId, kind, { name, studentId }) {
@@ -372,4 +396,8 @@ export const admin = {
   clientErrors:      (limit = 200) => call('admin_client_errors', { p_limit: limit }),
   resetCounts:       ()            => call('admin_reset_counts'),
   reset:             (what)        => call('admin_reset', { p_what: what }),
+  listProposals:     ()            => call('admin_list_proposals'),
+  adoptProposal:     (id, title, text) => call('admin_adopt_proposal', { p_id: id, p_title: title, p_text: text }).then((r) => { poke(['list', 'proposals']); return r; }),
+  rejectProposal:    (id)          => call('admin_reject_proposal', { p_id: id }).then((r) => { poke(['proposals']); return r; }),
+  restoreProposal:   (id)          => call('admin_restore_proposal', { p_id: id }).then((r) => { poke(['proposals']); return r; }),
 };

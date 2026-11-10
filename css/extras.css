@@ -326,7 +326,7 @@ body.amber .grid-cells, body.amber .grid-cells span { border-color: #5E3F00; }
   .props.sheet .stamp-btn.is-mine { border-color: #C23B32; }
   .tray, .sticky, .icon.extra { display: none !important; }
   .win-min { display: none; }
-  .props.sheet { padding-bottom: env(safe-area-inset-bottom); }                                  /* nothing to fold on a phone */
+  .props.sheet { bottom: calc(var(--floor-h) + env(safe-area-inset-bottom)) !important; }          /* above the floor strip (and the host's badge) */
   .menu-name { max-width: 5.5em; }
   .who { width: 44px; height: 36px; margin: -3px 0; }       /* bigger hit area, same row height */
   .who-slot { width: 44px; }
@@ -338,7 +338,7 @@ body.amber .grid-cells, body.amber .grid-cells span { border-color: #5E3F00; }
   .compose-hint { font-size: 12px; }
   /* writing on a phone: give the keyboard the room (dock and cat step aside while a field has focus) */
   body:has(.win-foot textarea:focus) .dock, body:has(.win-foot textarea:focus) .cat-layer { display: none; }
-  body:has(.win-foot textarea:focus) .desktop { bottom: 0; }
+  body:has(.win-foot textarea:focus) .desktop { bottom: calc(var(--floor-h) + env(safe-area-inset-bottom)); }   /* the floor (and the badge on it) stays: keep 올리기 above it */
   body:is(.cat-phone, .bin-phone):has(.win-foot textarea:focus) .win:not(.amber-toast) { bottom: 10px; }
   .win.amber-toast { left: 10px !important; right: 10px; top: auto !important; bottom: 74px; width: auto !important; height: auto !important; }
   body:is(.cat-phone, .bin-phone):not(.not-entered) .win { bottom: 48px; }
@@ -502,7 +502,7 @@ html.rn-busy body.fx-cursor, html.rn-busy body.fx-cursor *:not(.saver, .saver *)
 .ticker-text:hover { background: var(--cream); color: var(--ink); }
 body.phase-night .ticker-text { background: #111A2E; }
 @keyframes ticker-in { from { transform: translateX(var(--from)); } to { transform: translateX(var(--to)); } }
-@media (max-width: 767px) { .ticker { display: none; } }
+
 
 @media (prefers-reduced-motion: reduce) {
   .no, .zoom-rect, .drift, .line.last-slot .line-text, .milestone, .line.typing-in .line-text::after { animation: none !important; }
@@ -511,7 +511,7 @@ body.phase-night .ticker-text { background: #111A2E; }
 
 /* sound turned itself off after a long time away (js/extras/sound.js) */
 .doze-note { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 2600; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--paper); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); white-space: nowrap; }
-@media (max-width: 767px) { .doze-note { bottom: calc(76px + env(safe-area-inset-bottom)); white-space: normal; width: calc(100% - 32px); } }
+@media (max-width: 767px) { .doze-note { bottom: calc(76px + var(--floor-h) + env(safe-area-inset-bottom)); white-space: normal; width: calc(100% - 32px); } }
 .update-note { bottom: auto; top: calc(var(--menubar-h) + 12px); }
 @media (max-width: 767px) { .update-note { bottom: auto; top: calc(var(--menubar-h) + 12px); } }
 
@@ -666,4 +666,70 @@ body.pattern-plain .sky-layer::after { background-image: none !important; }
   .login { gap: 12px; padding-top: 14px; }
   .login .brand svg { width: 30px; height: 30px; }
   .login .brand .word { font-size: 22px; line-height: 26px; }
+}
+
+/* ------------------------------------------------------------ 새로운 이야기 건의함 */
+
+.prop-intro { margin: 10px 14px 0; line-height: 18px; }
+.prop-list { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 16px; }
+.prop-card { border: 1px solid var(--rule); background: var(--field); padding: 9px 12px 10px; display: flex; flex-direction: column; gap: 4px; }
+.prop-card.mine { border: 2px solid var(--ink); background: var(--pink-bg); padding: 8px 11px 9px; }
+.prop-card.mine .chip.pink { background: var(--paper); }
+.prop-card.fresh { animation: line-in 1.6s steps(8) 1; }
+.prop-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.prop-top b { font-size: 13px; }
+.prop-first { margin: 0; font-family: var(--text); font-size: 16px; line-height: 26px; word-break: keep-all; overflow-wrap: anywhere; }
+.prop-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--pencil); }
+.prop-confirm { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.like { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; min-width: 54px; justify-content: center; padding: 0 10px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
+.like:hover:not(:disabled) { background: var(--stone-bg); }
+.like[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: 700; }
+.like[aria-pressed="true"] svg { color: #F08A6E; }
+.like[aria-pressed="true"] .heart-hole { display: none; }
+.like:disabled { border-color: var(--rule); color: var(--faint); cursor: default; }
+.seg-sm button { min-height: 26px; min-width: 64px; }
+.how { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--pencil); }
+.how i { font-style: normal; padding: 1px 6px; background: var(--stone-bg); color: var(--stone); }
+.dialog.adopt { width: min(460px, 100%); }
+.dialog.adopt .orig summary { cursor: pointer; color: var(--pencil); }
+.dialog.adopt .orig { padding: 6px 10px; background: var(--stone-bg); color: var(--stone); }
+.dialog.adopt .orig p { margin: 4px 0 0; }
+.mine-props .prop-top { margin-bottom: 2px; }
+.mine-prop-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.mine-prop-list li { padding: 8px 0; border-bottom: 1px dotted var(--rule); display: flex; flex-direction: column; gap: 3px; }
+.chip.my-count { font-variant-numeric: tabular-nums; }
+.nav-badge { position: absolute; left: calc(50% + 8px); top: -2px; min-width: 18px; padding: 0 4px; background: var(--red); color: var(--paper); font: 700 11px/16px var(--ui); font-style: normal; text-align: center; pointer-events: none; }
+.icon, .dock a { position: relative; }
+.adopt-note { position: fixed; z-index: 2500; left: 50%; top: calc(var(--menubar-h) + 12px); translate: -50% 0; width: min(520px, calc(100% - 24px)); display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; box-shadow: 3px 3px 0 var(--grass); }
+.adopt-note a { color: inherit; font-weight: 700; }
+.adopt-x { margin-left: auto; border: none; background: none; color: inherit; font: inherit; font-size: 16px; cursor: pointer; min-width: 28px; min-height: 28px; }
+fieldset.set-group { border: 1px solid var(--rule); margin: 0; padding: 8px 12px 12px; }
+fieldset.set-group legend { padding: 0 6px; font-weight: 700; }
+.set-hint { display: block; font-size: 11px; line-height: 15px; }
+
+/* ------------------------------------------------------------ the host's badge (bottom right) */
+
+/* desktop: a long icon column wraps into a second column before it reaches the badge's corner */
+@media (min-width: 768px) {
+  .icons { width: auto; max-height: calc(100% - 26px - 76px); flex-wrap: wrap-reverse; align-content: flex-start; column-gap: 28px;
+           row-gap: clamp(2px, calc((100vh - 640px) / 8), 18px); }   /* a shorter screen first tightens the column */
+}
+/* phone: the dock steps up; a slim floor strip lies under it (a status line on the left, the badge on its right end) */
+:root { --floor-h: 0px; }
+.floor { display: none; }
+@media (max-width: 767px) {
+  :root { --floor-h: 60px; }
+  .desktop { bottom: calc(64px + var(--floor-h) + env(safe-area-inset-bottom)); }
+  .not-entered .desktop { bottom: calc(var(--floor-h) + env(safe-area-inset-bottom)); }
+  .dock { bottom: calc(var(--floor-h) + env(safe-area-inset-bottom)); height: 64px; padding-bottom: 0; }
+  .floor {
+    display: flex; align-items: center; position: fixed; inset: auto 0 0 0; z-index: 999;
+    height: calc(var(--floor-h) + env(safe-area-inset-bottom)); padding: 0 12px env(safe-area-inset-bottom);
+    background: var(--stone-bg); border-top: 2px solid var(--ink); color: var(--stone); font-size: 11px;
+  }
+  .floor-text { max-width: calc(100% - 196px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .floor.ticking .floor-text { visibility: hidden; }
+  .prop-meta .like { min-height: 40px; min-width: 64px; }
+  .prop-meta .btn-sm { min-height: 40px; }
+  .admin-foot-note { display: none; }
 }

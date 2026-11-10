@@ -113,14 +113,21 @@ export function initTicker() {
 
   function show() {
     if (showing || !queue.length) return;
-    const menubar = document.getElementById('menubar');
-    const spacer = menubar?.querySelector('.spacer')?.getBoundingClientRect();
-    if (!spacer || spacer.width < 220 || isPhone() || document.hidden) { queue.length = 0; return; }
+    // desktop: in the menu bar's empty middle · phone: on the strip under the dock (clear of the host's badge)
+    const phone = isPhone();
+    const floor = phone ? document.querySelector('.floor') : null;
+    const r = phone ? floor?.getBoundingClientRect() : document.getElementById('menubar')?.querySelector('.spacer')?.getBoundingClientRect();
+    const area = r && (phone
+      ? { left: r.left + 6, width: r.width - 206, top: r.top + 2, height: Math.min(r.height - 2, 52) }
+      : { left: r.left + 12, width: r.width - 24, top: '', height: '' });
+    if (!area || area.width < (phone ? 120 : 196) || (phone && !r.height) || document.hidden) { queue.length = 0; return; }
     showing = true;
     const { text, href } = queue.shift();
     const a = h('a', { class: 'ticker-text', href }, text);
     box.replaceChildren(a);
-    Object.assign(box.style, { left: `${Math.round(spacer.left + 12)}px`, width: `${Math.round(spacer.width - 24)}px` });
+    const px = (v) => (v === '' ? '' : `${Math.round(v)}px`);
+    Object.assign(box.style, { left: px(area.left), width: px(area.width), top: px(area.top), height: px(area.height) });
+    floor?.classList.add('ticking');
     box.hidden = false;
     box.classList.remove('out');
     const travel = box.clientWidth + a.offsetWidth;
@@ -132,7 +139,7 @@ export function initTicker() {
     }
     setTimeout(() => {                     // hold in the middle, then fade in pixel steps
       box.classList.add('out');
-      setTimeout(() => { box.hidden = true; box.classList.remove('out'); showing = false; show(); }, 700);
+      setTimeout(() => { box.hidden = true; box.classList.remove('out'); document.querySelector('.floor')?.classList.remove('ticking'); showing = false; show(); }, 700);
     }, Math.round(ms * 0.45) + 3200);
   }
 

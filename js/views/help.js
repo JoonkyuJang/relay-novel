@@ -6,7 +6,9 @@ import { deadlineText } from '../extras/desk.js';
 
 function perPerson(s) {
   const n = s.lines_per_person_per_story ?? 1;
-  const start = `새 이야기는 한 사람이 ${s.stories_started_per_person ?? 2}개까지 시작할 수 있어요.`;
+  const start = on('proposals')
+    ? `새 이야기는 건의함에 건의해요. 한 사람이 ${X('proposals_per_person')}개까지 기다리게 할 수 있고${on('proposal_likes') ? ', 로그인하면 마음에 드는 건의에 ♥를 누를 수 있어요' : ''}. 관리자가 채택하면 이야기 서랍에 올라가요.`
+    : `새 이야기는 한 사람이 ${s.stories_started_per_person ?? 2}개까지 시작할 수 있어요.`;
   if (n <= 1) return `한 사람은 한 이야기에 한 줄만 쓸 수 있어요. ${start}`;
   return s.allow_consecutive_lines
     ? `한 사람은 한 이야기에 ${n}줄까지 쓸 수 있고, 연달아 써도 괜찮아요. ${start}`

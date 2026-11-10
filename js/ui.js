@@ -36,6 +36,8 @@ const ICONS = {
   pause:  '<path d="M3 2h4v12H3zM9 2h4v12H9z" fill="currentColor"/>',
   prev:   '<path d="M2 2h2v12H2zM14 2h-2v1h-2v1H8v1H6v1H5v4h1v1h2v1h2v1h2v1h2z" fill="currentColor"/>',
   next:   '<path d="M12 2h2v12h-2zM2 2h2v1h2v1h2v1h2v1h1v4h-1v1H8v1H6v1H4v1H2z" fill="currentColor"/>',
+  suggest: '<path data-fill d="M5.5 1.5h5v7h-5z" fill="#FFF9EF" stroke="currentColor"/><path d="M7 3.5h2M7 5.5h2" stroke="currentColor"/><path data-fill d="M1.5 7.5h13v7h-13z" fill="#FFF9EF" stroke="currentColor"/><path d="M4.5 7.5h7" stroke="currentColor" stroke-width="2"/><path d="M4 11.5h8" stroke="currentColor"/>',
+  heart:  '<path d="M3 3h3v1h1v1h2V4h1V3h3v1h1v4h-1v1h-1v1h-1v1h-1v1H9v1H7v-1H6v-1H5v-1H4V9H3V8H2V4h1z" fill="currentColor"/><path class="heart-hole" d="M4 4h2v1h1v1h2V5h1V4h2v4h-1v1h-1v1H9v1H7v-1H6V9H5V8H4z" fill="#FFFBF4"/>',
 };
 export function icon(name, size = 16) {
   const t = document.createElement('template');
@@ -154,6 +156,11 @@ const MESSAGES = {
   rate_limited:        () => '지금 너무 많은 글이 한꺼번에 올라오고 있어요. 잠시 후 다시 시도해 주세요.',
   submissions_closed:  () => '지금은 글쓰기가 닫혀 있어요.',
   new_stories_closed:  () => '지금은 새 이야기를 시작할 수 없어요.',
+  admin_only:          () => '새 이야기는 건의함으로 건의해 주세요. 관리자가 채택하면 서랍에 올라가요.',
+  proposals_closed:    () => '지금은 새 이야기 건의를 받지 않아요.',
+  proposal_limit:      (d) => `건의는 한 사람당 ${d?.max}개까지 기다릴 수 있어요. 채택되거나 반려되면, 또는 하나를 거둬들이면 다시 건의할 수 있어요.`,
+  proposal_not_found:  () => '이미 채택되었거나 내려간 건의예요.',
+  own_proposal:        () => '내 건의에는 ♥를 누를 수 없어요.',
   invalid_name:        () => '이름을 1~20자로 입력해 주세요.',
   invalid_student_id:  () => '학번을 확인해 주세요. (숫자/영문, 20자 이내)',
   empty_text:          () => '내용을 입력해 주세요.',

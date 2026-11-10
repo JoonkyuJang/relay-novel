@@ -10,6 +10,7 @@ const sound = (name) => dispatchEvent(new CustomEvent('rn-sound', { detail: name
 const moment = (kind, detail) => dispatchEvent(new CustomEvent('rn-win', { detail: { kind, ...detail } }));
 
 const phoneQuery = window.matchMedia('(max-width: 767px)');
+const CORNER = { w: 210, h: 70 };                 // the host's badge in the bottom-right corner (Netlify: ~202×64)
 export const isPhone = () => phoneQuery.matches;
 
 export function createWM(layer, { onActiveChange, tray = null, canMinimize = () => true } = {}) {
@@ -66,6 +67,12 @@ export function createWM(layer, { onActiveChange, tray = null, canMinimize = () 
     // …and its right edge (where 이어 쓰기 / 올리기 sit) on a narrow screen
     if (el.offsetWidth > b.w - 8) el.style.width = `${Math.max(280, b.w - 8)}px`;
     if (left + el.offsetWidth > b.w - 4) el.style.left = `${Math.max(0, b.w - el.offsetWidth - 4)}px`;
+    // …and out of the bottom-right corner, where the host puts its badge (Netlify): up if there's room, else left
+    const t = parseInt(el.style.top) || 0, l = parseInt(el.style.left) || 0;
+    if (l + el.offsetWidth > b.w - CORNER.w && t + el.offsetHeight > b.h - CORNER.h) {
+      if (b.h - CORNER.h - el.offsetHeight >= 0) el.style.top = `${b.h - CORNER.h - el.offsetHeight}px`;
+      else if (b.w - CORNER.w - el.offsetWidth >= 0) el.style.left = `${b.w - CORNER.w - el.offsetWidth}px`;
+    }
   }
 
   function makeDraggable(win) {

@@ -40,10 +40,23 @@ export function loginView(app, { reason = '' } = {}) {
     app.refreshMenubar?.();
   }
 
+  // (the settings may arrive after this window opens, and the admin may change them: keep these two current)
+  const introEl = h('p', { style: 'margin:0' });
+  const privacyEl = h('p', { class: 'muted', style: 'margin:0;line-height:18px' });
+  function drawCopy() {
+    const st = app.settings ?? {};
+    const per = st.lines_per_person_per_story ?? 1;
+    introEl.textContent = `${per <= 1 ? '한 사람이 한 줄씩' : '여럿이 한 줄씩 번갈아'} 이어 써요. ${st.max_lines ?? 20}줄이 모이면 한 편이 완성돼요.`;
+    privacyEl.textContent = (st.show_student_id ?? true)
+      ? '이름과 학번은 쓴 줄과 함께 저장되고, 줄의 속성 창에서 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'
+      : '이름과 학번은 쓴 줄과 함께 저장돼요. 다른 사람에게는 이름만 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.';
+  }
+  drawCopy();
+
   const form = h('form', { class: 'login', novalidate: true },
     h('div', { class: 'brand' }, icon('logo', 40),
       h('div', {}, h('div', { class: 'word' }, '연문회 OS'), h('div', { class: 'muted' }, '릴레이 소설 · 2026 가을'))),
-    h('p', { style: 'margin:0' }, `한 사람이 한 줄씩 이어 써요. ${app.settings?.max_lines ?? 20}줄이 모이면 한 편이 완성돼요.`),
+    introEl,
     msg,
     h('div', { class: 'label' }, h('label', { for: 'lg-name' }, '이름'), name),
     h('div', { class: 'label' }, h('label', { for: 'lg-sid' }, '학번'), sid),
@@ -54,10 +67,7 @@ export function loginView(app, { reason = '' } = {}) {
       on('sound') ? h('div', { class: 'toggle sound-row' }, h('span', { id: 'lg-snd' }, '소리'),
         h('div', { class: 'seg', role: 'group', 'aria-labelledby': 'lg-snd' }, sndOn, sndOff)) : null),
     on('sound') ? sndHint : null,
-    h('p', { class: 'muted', style: 'margin:0;line-height:18px' },
-      (app.settings?.show_student_id ?? true)
-        ? '이름과 학번은 쓴 줄과 함께 저장되고, 줄의 속성 창에서 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'
-        : '이름과 학번은 쓴 줄과 함께 저장돼요. 다른 사람에게는 이름만 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'),
+    privacyEl,
     h('div', { class: 'actions', style: 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap' },
       h('button', { type: 'button', class: 'btn', onclick: () => { api.setGuest(); app.afterLogin(); } }, '둘러보기 (읽기만)'),
       h('button', { type: 'submit', class: 'btn btn-primary' }, '들어가기')));
@@ -99,5 +109,6 @@ export function loginView(app, { reason = '' } = {}) {
     size: { w: 460, h: 530 }, position: 'center', remember: false, closable: false, resizable: false,
     className: 'login-win',
     mount() { setTimeout(() => (name.value ? sid : name).focus({ preventScroll: true }), 50); },
+    onSettings: drawCopy,
   };
 }

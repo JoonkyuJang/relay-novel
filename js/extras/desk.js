@@ -233,7 +233,8 @@ export function initDesk(app, wm, { desktop, iconsNav }) {
   function deskItems() {
     const saverOff = api.prefs.get('saver') === '0';
     return [
-      ['새 이야기', () => app.go('/new')],
+      [on('proposals') && !app.admin ? '새 이야기 건의' : '새 이야기', () => app.go('/new')],
+      on('proposals') ? ['건의함', () => app.go('/proposals')] : null,
       on('my_lines') && app.identity() ? ['내가 쓴 줄', () => app.go('/mine')] : null,
       on('minimize') ? ['창 정리하기', () => wm.tidy()] : null,
       on('minimize') ? ['모두 접어 두기', () => wm.minimizeAll()] : null,

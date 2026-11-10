@@ -19,12 +19,15 @@ fs.mkdirSync(SHOTS, { recursive: true });
 
 // ---- static server
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2' };
+// the same response headers Netlify sends (the `/*` block of _headers: CSP etc.), so a CSP mistake fails here
+const HOST_HEADERS = Object.fromEntries(fs.readFileSync(path.join(ROOT, '_headers'), 'utf8').split('\n')
+  .filter(l => /^\s+[A-Za-z-]+:/.test(l)).map(l => { const i = l.indexOf(':'); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; }));
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (p.endsWith('/')) p += 'index.html';
   const f = path.join(ROOT, p);
   if (!f.startsWith(ROOT) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'content-type': types[path.extname(f)] ?? 'application/octet-stream' });
+  res.writeHead(200, { 'content-type': types[path.extname(f)] ?? 'application/octet-stream', ...HOST_HEADERS });
   fs.createReadStream(f).pipe(res);
 }).listen(0);
 const BASE = `http://localhost:${server.address().port}`;
@@ -113,6 +116,8 @@ async function step(name, fn) {
 
 console.log('연문회 OS e2e (local)');
 await pool.query(`insert into app.admins(user_id) values ($1) on conflict do nothing`, [ADMIN]);
+// the older steps start stories as ordinary people: the 건의함 (on by default) gets its own step at the end
+await pool.query(`update app.settings set extras = extras || '{"proposals": false}'::jsonb`);
 
 let storyId;
 
@@ -768,7 +773,7 @@ await step('관리 · 부가 기능: inner tabs save switches and the deadline',
   await w.locator('button:has-text("저장")').click();
   await w.locator('text=설정을 저장했어요').waitFor();
   assert.equal((await pool.query(`select extras->>'title_required' v from app.settings`)).rows[0].v, 'false');
-  await pool.query(`update app.settings set extras = '{}'`);
+  await pool.query(`update app.settings set extras = '{"proposals": false}'`);
 });
 
 await step('mobile: stamp sheet buttons, cat on the dock, D-n deadline', async () => {
@@ -1266,8 +1271,11 @@ await step('more touches: sound on the login screen, coffee rings, patterns, sha
   await p.goto(`${BASE}/#/about`);
   await win(p, 'about').locator('.gift-shelf').waitFor();
   await win(p, 'about').locator('.win-close').click();
-  await p.evaluate(() => window.__rnCat.mischief());
-  await p.waitForFunction(() => document.querySelector('.paper-ball') || document.querySelector('.sticky')?.style.translate || document.querySelector('.tray-btn.batted'), null, { timeout: 15000 });
+  // (the cat may be mid-walk or napping when asked: give it a few chances)
+  const mischiefDone = () => p.waitForFunction(() => document.querySelector('.paper-ball') || document.querySelector('.sticky')?.style.translate || document.querySelector('.tray-btn.batted'), null, { timeout: 8000 }).then(() => true, () => false);
+  let didMischief = false;
+  for (let i = 0; i < 3 && !didMischief; i++) { await p.evaluate(() => window.__rnCat.mischief()); didMischief = await mischiefDone(); }
+  assert.ok(didMischief, 'the cat got up to some mischief');
   // 결산: after the deadline (an icon on the desktop, a few pages)
   await pool.query(`update app.settings set extras = extras || '{"deadline": "2026-11-01T00:00:00+09:00"}'::jsonb`);
   await p.goto(`${BASE}/?again=1#/recap`);
@@ -1291,6 +1299,91 @@ await step('more touches: sound on the login screen, coffee rings, patterns, sha
 });
 
 // Last on purpose: it wipes the database.
+await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with edits → the proposer is told once; 내 줄 n/N', async () => {
+  await pool.query(`update app.settings set allow_new_stories = true, extras = extras || '{"proposals": true, "title_required": true}'::jsonb`);
+  // A (desktop): no 새 이야기 icon, a 건의함 one; the 서랍 offers 새 이야기 건의하기
+  const a = await newUser('건의자', '2026300001');
+  await a.goto(`${BASE}/`);
+  await win(a, 'stories').waitFor();
+  await a.locator('#icons .icon[data-route="/proposals"]').waitFor();
+  assert.equal(await a.locator('#icons .icon[data-route="/new"]').count(), 0);
+  await win(a, 'stories').locator('a:text-is("새 이야기 건의하기")').click();
+  const nw = win(a, 'new');
+  await nw.locator('.win-title h2:text-is("새 이야기 건의")').waitFor();
+  await nw.locator('#ns-title').fill('고양이가 사라진 날');
+  await nw.locator('#ns-text').fill('학생회관 고양이가 사흘째 보이지 않았다.');
+  await nw.locator('button:text-is("건의하기")').click();
+  const pw = win(a, 'proposals');
+  await pw.locator('text=건의했어요').waitFor();
+  const mine = pw.locator('.prop-card.mine');
+  await mine.waitFor();
+  assert.ok(await mine.locator('.like').isDisabled(), 'no ♥ on my own');
+  await pw.locator('text=내 건의 1/2 기다리는 중').waitFor();
+  await a.screenshot({ path: `${SHOTS}/60-proposals-desktop.png` });
+  const pid = (await pool.query(`select id from app.proposals where title = '고양이가 사라진 날'`)).rows[0].id;
+  // B (phone): the dock has 건의함; the floor strip lies under it; ♥ toggles
+  await pool.query(`select public.propose_story('시험 전날 밤', '새벽 세 시, 도서관 열람실 불이 하나만 켜져 있었다.', '하늘', '2026300009', 'c9')`);
+  const b = await newUser('폰건의', '2026300002', { mobile: true });
+  await b.goto(`${BASE}/#/proposals`);
+  const bw = win(b, 'proposals');
+  await bw.locator('.prop-card').nth(1).waitFor();
+  await b.locator('.dock a[data-route="/proposals"][aria-current="page"]').waitFor();
+  const dock = await b.locator('.dock').boundingBox(), floor = await b.locator('.floor').boundingBox();
+  assert.ok(Math.abs(dock.y + dock.height - floor.y) <= 1 && floor.height >= 56, `dock sits on the floor strip (${dock.y + dock.height} vs ${floor.y})`);
+  const winBox = await bw.boundingBox();
+  assert.ok(winBox.y + winBox.height <= dock.y, 'the window stays above the dock');
+  const like = bw.locator(`.prop-card[data-id="${pid}"] .like`);
+  await like.tap();
+  await bw.locator(`.prop-card[data-id="${pid}"] .like[aria-pressed="true"]:has-text("1")`).waitFor();
+  await b.screenshot({ path: `${SHOTS}/61-proposals-phone.png` });
+  // admin: 반려 (asks once) and 채택… with an edited title
+  const ad = await newUser('운영진2', null, { entered: false });
+  await adminLogin(ad);
+  await ad.locator('#icons .icon[data-route="/new"]').waitFor();                 // admins keep 새 이야기
+  await ad.locator('#icons .icon[data-route="/proposals"] .nav-badge:text-is("2")').waitFor();
+  await ad.goto(`${BASE}/#/proposals`);
+  const aw = win(ad, 'proposals');
+  const other = aw.locator('.prop-card', { hasText: '시험 전날 밤' });
+  await other.locator('button:text-is("반려")').click();
+  await other.locator('text=반려할까요?').waitFor();
+  await other.locator('button:text-is("반려하기")').click();
+  await aw.locator('text=건의를 반려했어요').waitFor();
+  await aw.locator('.prop-card', { hasText: '시험 전날 밤' }).waitFor({ state: 'detached' });
+  await aw.locator(`.prop-card[data-id="${pid}"] button:text-is("채택…")`).click();
+  const dlg = ad.locator('.dialog.adopt');
+  await dlg.waitFor();
+  await dlg.locator('#ad-title').fill('고양이가 사라진 날에');
+  await dlg.locator('text=고친 곳: 제목').waitFor();
+  await ad.screenshot({ path: `${SHOTS}/62-adopt-dialog.png` });
+  await dlg.locator('button:text-is("채택하고 서랍에 올리기")').click();
+  await aw.locator('text=채택했어요').waitFor();
+  const st = (await pool.query(`select s.id, s.title, l.author_name from app.stories s join app.lines l on l.id = s.head_line_id where s.title = '고양이가 사라진 날에'`)).rows[0];
+  assert.equal(st.author_name, '건의자');
+  // the admin console's 건의함 tab can bring a 반려 back
+  await ad.goto(`${BASE}/#/admin`);
+  const cw = win(ad, 'admin');
+  await cw.locator('.tabs >> text=건의함').click();
+  await cw.locator('h3:has-text("반려 1")').waitFor();
+  await cw.locator('button:text-is("되돌리기")').click();
+  await cw.locator('text=건의함으로 되돌렸어요').waitFor();
+  assert.equal((await pool.query(`select status from app.proposals where title = '시험 전날 밤'`)).rows[0].status, 'waiting');
+  // A comes back: told once, then 내 줄 1/N in the new story; 내가 쓴 줄 shows 채택
+  await a.reload();
+  await a.locator('.adopt-note:has-text("채택되어")').waitFor();
+  await a.screenshot({ path: `${SHOTS}/63-adopt-note.png` });
+  for (let i = 0; i < 20 && !(await pool.query(`select seen_at from app.proposals where id = $1`, [pid])).rows[0].seen_at; i++) await a.waitForTimeout(200);
+  assert.ok((await pool.query(`select seen_at from app.proposals where id = $1`, [pid])).rows[0].seen_at, 'acked');
+  await a.goto(`${BASE}/#/story/${st.id}`);
+  await win(a, `story:${st.id}`).locator('.my-count', { hasText: /내 줄 1\/\d/ }).waitFor();
+  await a.goto(`${BASE}/#/mine`);
+  await win(a, 'mine').locator('.mine-props .chip.grass:has-text("채택")').waitFor();
+  await a.reload();
+  await win(a, 'mine').waitFor();
+  await a.waitForTimeout(800);
+  assert.equal(await a.locator('.adopt-note').count(), 0, 'the note shows only once');
+  await pool.query(`update app.settings set extras = extras || '{"proposals": false}'::jsonb`);
+});
+
 await step('관리 · 초기화: one counter, then everything (with a backup download first)', async () => {
   await finishedStory('지워질 이야기');
   await pool.query(`update app.counters set value = 7 where key = 'cat_pets'`);

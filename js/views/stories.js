@@ -16,11 +16,17 @@ export function storiesView(app) {
   const head = h('div', { class: 'drawer-head', 'aria-hidden': 'true' },
     h('span', {}, '이름'), h('span', {}, '줄'), h('span', {}, '상태'), h('span', { class: 'when' }, '최근'));
   const rows = h('div', { class: 'win-scroll' });
-  const foot = h('div', { class: 'win-foot' },
-    h('div', { class: 'actions', style: 'justify-content:space-between;align-items:center' },
-      h('span', { style: 'display:flex;gap:14px' }, h('a', { href: '#/guestbook', class: 'btn-link' }, '방명록 ▸'),
+  const foot = h('div', { class: 'win-foot' });
+  // while the 건의함 is on, people propose (admins still start one directly)
+  function renderFoot() {
+    const prop = on('proposals');
+    foot.replaceChildren(h('div', { class: 'actions', style: 'justify-content:space-between;align-items:center' },
+      h('span', { style: 'display:flex;gap:14px;flex-wrap:wrap' }, h('a', { href: '#/guestbook', class: 'btn-link' }, '방명록 ▸'),
+        prop ? h('a', { href: '#/proposals', class: 'btn-link' }, '건의함 ▸') : null,
         app.recapOpen?.() ? h('a', { href: '#/recap', class: 'btn-link recap-link' }, '2026 가을 결산 ▸') : null),
-      h('a', { href: '#/new', class: 'btn btn-primary' }, '새 이야기 시작')));
+      h('a', { href: '#/new', class: 'btn btn-primary' }, prop && !app.admin ? '새 이야기 건의하기' : '새 이야기 시작')));
+  }
+  renderFoot();
   const body = document.createDocumentFragment();
   body.append(bar, head, rows, foot);
 
@@ -72,7 +78,7 @@ export function storiesView(app) {
         h('span', { class: 'muted' }, `진행 중 ${open.length}`),
         h('span', { class: 'muted' }, `완결 ${done.length}`));
       if (!list.length) {
-        rows.replaceChildren(h('div', { class: 'empty' }, '아직 이야기가 없어요. 첫 줄을 써서 시작해 보세요.'));
+        rows.replaceChildren(h('div', { class: 'empty' }, on('proposals') && !app.admin ? '아직 이야기가 없어요. 건의함에 새 이야기를 건의해 보세요.' : '아직 이야기가 없어요. 첫 줄을 써서 시작해 보세요.'));
         return;
       }
       rows.replaceChildren(...[
@@ -89,7 +95,8 @@ export function storiesView(app) {
     type: 'stories', route: '/stories', title: '이야기 서랍', body,
     size: { w: 520, h: 500 }, minSize: { w: 380, h: 300 }, origin: { x: 36, y: 24 },
     mount() { refresh(); unwatch = api.watch(['list'], refresh); },
-    onSettings() { shownSig = null; refresh(); },
+    onSettings() { shownSig = null; renderFoot(); refresh(); },
+    onFocus() { renderFoot(); },
     unmount() { unwatch?.(); },
   };
 }

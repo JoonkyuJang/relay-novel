@@ -70,6 +70,16 @@ await test('admin functions: anon denied, non-admin user rejected', async () => 
   assert.equal(await admin('is_admin'), true);
 });
 
+await test('건의함 on by default: only admins start stories directly (the suite then turns it off)', async () => {
+  assert.equal((await rpc('get_public_settings')).extras.proposals, true);
+  await expectErr(rpc('create_story', { p_title: 't', p_text: 'ok', ...who(1) }), 'admin_only');
+  await expectErr(rpc('create_story', { p_title: 't', p_text: 'ok', ...who(1) }, { as: 'authenticated', sub: USER }), 'admin_only');
+  const r = await admin('create_story', { p_title: '관리자', p_text: '바로 시작', ...who(990) });
+  assert.ok(r.story_id);
+  await su('select app.purge_stories(array[$1]::uuid[])', [r.story_id]);
+  await admin('admin_update_settings', { p: { extras: { proposals: false } } });
+});
+
 await test('title required by default; the admin can turn it off', async () => {
   assert.equal((await rpc('get_public_settings')).extras.title_required, true);
   await expectErr(rpc('create_story', { p_title: null, p_text: 'ok', ...who(1) }), 'title_required');
@@ -477,8 +487,10 @@ await test('hardening: one baton per person, export hides 학번 when hidden, co
 
 await test('write_check explains before claiming; the deadline can close writing', async () => {
   const id = (await rpc('create_story', { p_title: '확인', p_text: '하나', ...who(9200) })).story_id;
-  assert.equal(await rpc('write_check', { p_story_id: id, p_student_id: '2026009201' }), null);
-  assert.equal((await rpc('write_check', { p_story_id: id, p_student_id: '2026009200' })).code, 'person_limit');
+  const fresh = await rpc('write_check', { p_story_id: id, p_student_id: '2026009201' });
+  assert.equal(fresh.code, undefined); assert.equal(fresh.mine, 0);   // nothing in the way; 내 줄 0/max
+  const starter = await rpc('write_check', { p_story_id: id, p_student_id: '2026009200' });
+  assert.ok(['person_limit', 'consecutive'].includes(starter.code)); assert.equal(starter.mine, 1);
   await rpc('claim_baton', { p_story_id: id, ...who(9201) });
   const held = await rpc('write_check', { p_story_id: id, p_student_id: '2026009202' });
   assert.equal(held.code, 'baton_held'); assert.ok(held.detail.expires_at);
@@ -488,7 +500,8 @@ await test('write_check explains before claiming; the deadline can close writing
   await expectErr(rpc('claim_baton', { p_story_id: id, ...who(9201) }), 'deadline_passed');
   await expectErr(rpc('create_story', { p_title: 'x', p_text: 'y', ...who(9203) }), 'deadline_passed');
   await admin('admin_update_settings', { p: { extras: { deadline_closes: false, deadline: '2026-11-23T00:00:00+09:00' } } });
-  assert.equal(await rpc('write_check', { p_story_id: id, p_student_id: '2026009201' }), null);
+  assert.equal((await rpc('write_check', { p_story_id: id, p_student_id: '2026009201' })).code, undefined);
+  assert.equal(await rpc('write_check', { p_story_id: id, p_student_id: '' }), null);
 });
 
 await test('내가 쓴 줄 by 이름 + 학번; crash reports are throttled and admin-only', async () => {
@@ -623,6 +636,82 @@ await test('story cards and about', async () => {
   const about = await rpc('get_about');
   assert.ok(about.stories >= 1 && about.lines >= 2 && about.stamps >= 1 && about.since);
   await admin('admin_update_settings', { p: { max_lines: 20 } });
+});
+
+await test('건의함: propose, ♥ (not my own), cap per person, withdraw, 채택 with edits, 반려 + 되돌리기', async () => {
+  await admin('admin_update_settings', { p: { allow_new_stories: true, extras: { proposals: true, proposals_per_person: 2, title_required: true } } });
+  const P = (i, t = '건의', x = '첫 줄이에요') => rpc('propose_story', { p_title: t, p_text: x, ...who(i) });
+  await expectErr(P(9500, null), 'title_required');
+  await expectErr(P(9500, 't', '가'.repeat(101)), 'too_long');
+  const a = await P(9500, '첫째');
+  assert.deepEqual([a.waiting, a.max], [1, 2]);
+  const b = await P(9500, '둘째');
+  await expectErr(P(9500, '셋째'), 'proposal_limit');
+  // the 건의함: no 학번 anywhere, newest first, mine flagged
+  let box = await rpc('list_proposals', { p_student_id: '2026009500' });
+  assert.equal(box.my_waiting, 2); assert.equal(box.closed, null);
+  assert.deepEqual(box.items.map(x => x.title).slice(0, 2), ['둘째', '첫째']);
+  assert.ok(box.items.every(x => !('student_id' in x)) && box.items[0].mine);
+  // ♥: logged-in people toggle; not on your own
+  await expectErr(rpc('vote_proposal', { p_id: a.proposal_id, ...who(9500) }), 'own_proposal');
+  assert.deepEqual(await rpc('vote_proposal', { p_id: a.proposal_id, ...who(9501) }), { liked: true, likes: 1 });
+  await rpc('vote_proposal', { p_id: a.proposal_id, ...who(9502) });
+  assert.deepEqual(await rpc('vote_proposal', { p_id: a.proposal_id, ...who(9502) }), { liked: false, likes: 1 });
+  await expectErr(rpc('vote_proposal', { p_id: a.proposal_id, ...who(9501), p_name: '다른이름' }), 'not_your_stamp');
+  box = await rpc('list_proposals', { p_student_id: '2026009501' });
+  assert.equal(box.items.find(x => x.id === a.proposal_id).liked, true);
+  // ♥ counts can be hidden from everyone but admins
+  await admin('admin_update_settings', { p: { extras: { proposal_likes_public: false } } });
+  assert.equal((await rpc('list_proposals')).items.find(x => x.id === a.proposal_id).likes, null);
+  assert.equal((await admin('list_proposals')).items.find(x => x.id === a.proposal_id).likes, 1);
+  await admin('admin_update_settings', { p: { extras: { proposal_likes_public: true } } });
+  // withdraw frees a slot; only the proposer can
+  await expectErr(rpc('withdraw_proposal', { p_id: b.proposal_id, p_name: '작가9501', p_student_id: '2026009501' }), 'proposal_not_found');
+  await rpc('withdraw_proposal', { p_id: b.proposal_id, p_name: '작가9500', p_student_id: '2026009500' });
+  const c = await P(9500, '셋째');
+  // 채택: admins only, edits allowed, the first line stays the proposer's; 반려 hides; 되돌리기 brings back
+  await expectErr(rpc('admin_adopt_proposal', { p_id: a.proposal_id, p_title: null, p_text: null }), 'permission denied for function admin_adopt_proposal');
+  const ad = await admin('admin_adopt_proposal', { p_id: a.proposal_id, p_title: '첫째 (다듬음)', p_text: null });
+  assert.equal(ad.over_limit, false);
+  const s = await rpc('get_story', { p_story_id: ad.story_id });
+  assert.equal(s.title, '첫째 (다듬음)'); assert.equal(s.lines[0].text, '첫 줄이에요'); assert.equal(s.lines[0].author_name, '작가9500');
+  await expectErr(admin('admin_adopt_proposal', { p_id: a.proposal_id, p_title: null, p_text: null }), 'proposal_not_found');
+  // the proposer can't write line 2 (no consecutive lines), and sees 1/1 in that story
+  const wc = await rpc('write_check', { p_story_id: ad.story_id, p_student_id: '2026009500' });
+  assert.equal(wc.mine, 1); assert.ok(['person_limit', 'consecutive'].includes(wc.code));
+  await admin('admin_reject_proposal', { p_id: c.proposal_id });
+  assert.ok(!(await rpc('list_proposals')).items.some(x => x.id === c.proposal_id));
+  const mine = await rpc('my_proposals', { p_student_id: '2026009500', p_name: '작가9500' });
+  assert.deepEqual(mine.map(x => x.status).sort(), ['adopted', 'rejected']);
+  assert.equal(mine.find(x => x.status === 'adopted').seen, false);
+  assert.equal(await rpc('ack_proposals', { p_student_id: '2026009500', p_name: '작가9500' }), 1);
+  assert.equal(await rpc('ack_proposals', { p_student_id: '2026009500', p_name: '작가9500' }), 0);
+  await admin('admin_restore_proposal', { p_id: c.proposal_id });
+  assert.ok((await rpc('list_proposals')).items.some(x => x.id === c.proposal_id));
+  const all = await admin('admin_list_proposals');
+  assert.equal(all.find(x => x.id === a.proposal_id).edited, true);
+  assert.equal(all.find(x => x.id === c.proposal_id).author_stories, 1);
+  // closed: 새 이야기 건의 받기 off → proposals_closed; 마감 option; master switch off → back to direct starts
+  await admin('admin_update_settings', { p: { allow_new_stories: false } });
+  await expectErr(P(9600), 'proposals_closed');
+  assert.equal((await rpc('list_proposals')).closed, 'proposals_closed');
+  await admin('admin_update_settings', { p: { allow_new_stories: true, extras: { proposals_close_at_deadline: true, deadline: '2020-01-01T00:00:00+09:00' } } });
+  await expectErr(P(9600), 'deadline_passed');
+  await admin('admin_update_settings', { p: { extras: { proposals_close_at_deadline: false, deadline: '2026-11-23T00:00:00+09:00' } } });
+  // flood cap is a setting now (0 = none)
+  await admin('admin_update_settings', { p: { extras: { flood_stories: 1 } } });
+  await expectErr(P(9601), 'rate_limited');
+  await admin('admin_update_settings', { p: { extras: { flood_stories: 0 } } });
+  await P(9601);
+  await admin('admin_update_settings', { p: { extras: { flood_stories: 60 } } });
+  // 초기화 + 백업
+  const ex = await admin('admin_export');
+  assert.ok(ex.proposals.length >= 3 && ex.proposal_votes.length === 1);
+  assert.ok((await admin('admin_reset_counts')).proposals >= 3);
+  await admin('admin_reset', { p_what: ['proposals'] });
+  assert.equal((await admin('admin_reset_counts')).proposals, 0);
+  await admin('admin_update_settings', { p: { extras: { proposals: false, title_required: false } } });
+  await expectErr(rpc('list_proposals'), 'feature_off');
 });
 
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);

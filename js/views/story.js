@@ -99,6 +99,10 @@ export function storyView(app, storyId) {
       chip,
       h('span', {}, `${story.line_count} / ${story.max_lines}줄`),
       story.status === 'open' ? h('span', { class: 'muted' }, `${left}줄 남음 · 한 줄 최대 ${story.max_chars}자`) : null,
+      // how many of this story's lines are mine, out of what one person may write here
+      app.identity() && blocker?.max != null && story.status === 'open'
+        ? h('span', { class: `chip ${blocker.mine >= blocker.max ? 'stone' : 'sky'} my-count`, title: '이 이야기에 내가 쓴 줄 / 한 사람이 쓸 수 있는 줄' }, `내 줄 ${blocker.mine}/${blocker.max}`)
+        : null,
     ].filter(Boolean));
   }
 

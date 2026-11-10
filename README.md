@@ -65,9 +65,12 @@ sent with each write. "둘러보기" lets people read without logging in.
    insert into app.admins (user_id)
    select id from auth.users where email = 'YOUR_ADMIN_EMAIL';
    ```
-3. **GitHub → Settings → Pages**: deploy from branch `main`, folder `/ (root)`.
-   The site is then at `https://joonkyujang.github.io/relay-novel/`.
-4. Open `…/relay-novel/tests/remote/` (logged in as admin first) and run
+3. **Netlify**: import this repo, no build command, publish directory `.` (the repo root).
+   The site is at `https://yonsei-litclub-relay.netlify.app/`; `_headers` sets its security headers
+   (CSP: only this site and the Supabase project). If the Supabase project changes, update
+   `js/config.js` *and* the two Supabase URLs in `_headers`.
+   (GitHub Pages also still works — it just ignores `_headers`.)
+4. Open `…/tests/remote/` (logged in as admin first) and run
    the concurrency self-test.
 
 ## Admin

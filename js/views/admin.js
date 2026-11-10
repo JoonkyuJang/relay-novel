@@ -16,23 +16,44 @@ function noticeBox(slot) {
 
 // ============================================================ console
 
-const SETTINGS = [
-  ['max_lines', '이야기 길이 (N줄)', 'number'],
-  ['max_chars', '한 줄 글자 수 (C)', 'number'],
-  ['max_title_chars', '제목 글자 수', 'number'],
-  ['lines_per_person_per_story', '한 사람이 한 이야기에 쓰는 줄', 'number'],
-  ['stories_started_per_person', '한 사람이 시작하는 이야기', 'number'],
-  ['baton_seconds', '이어 쓰기 예약 시간 (초)', 'number'],
-  ['guestbook_max_chars', '방명록 글자 수', 'number'],
-  ['guestbook_cooldown_seconds', '방명록 간격 (초)', 'number'],
-  ['submissions_open', '글쓰기 열림', 'checkbox'],
-  ['allow_consecutive_lines', '같은 사람이 연달아 쓰기 허용', 'checkbox'],
-  ['allow_new_stories', '새 이야기 허용', 'checkbox'],
-  ['x:title_required', '새 이야기 제목 필수', 'checkbox'],
-  ['guestbook_open', '방명록 열림', 'checkbox'],
-  ['show_student_id', '속성 창에 학번 표시', 'checkbox'],
-  ['stats_public', '출석부 공개', 'checkbox'],
+// [key, label, type, hint, options] · 'x:key' = a switch in settings.extras · grouped like the mockup
+const SETTING_GROUPS = [
+  ['글쓰기', [
+    ['max_lines', '이야기 길이 (N줄)', 'number'],
+    ['max_chars', '한 줄 글자 수 (C)', 'number'],
+    ['max_title_chars', '제목 글자 수', 'number'],
+    ['lines_per_person_per_story', '한 사람이 한 이야기에 쓰는 줄', 'number', '이야기 창에 "내 줄 1/1"로 보여요'],
+    ['baton_seconds', '이어 쓰기 예약 시간 (초)', 'number'],
+    ['submissions_open', '글쓰기 열림', 'checkbox'],
+    ['allow_consecutive_lines', '같은 사람이 연달아 쓰기 허용', 'checkbox', '꺼 두면 건의한 사람(첫 줄)은 둘째 줄을 못 써요'],
+    ['x:title_required', '새 이야기 제목 필수', 'checkbox', '건의에도 똑같이'],
+    ['show_student_id', '속성 창에 학번 표시', 'checkbox'],
+  ]],
+  ['새로운 이야기 건의함', [
+    ['x:proposals', '건의함 쓰기', 'checkbox', '켜면 새 이야기는 관리자만 바로 시작하고, 다른 사람은 건의해요 · 끄면 누구나 바로 시작'],
+    ['allow_new_stories', '새 이야기 건의 받기', 'checkbox', '건의함을 끈 동안엔 "새 이야기 허용"'],
+    ['x:proposals_per_person', '한 사람이 기다리게 할 수 있는 건의', 'number', '채택 · 반려 · 거둬들이면 자리가 나요'],
+    ['stories_started_per_person', '한 사람의 이야기가 서랍에 오르는 최대', 'number', '건의함을 쓰면 채택할 때 넘으면 경고만 · 끄면 시작할 수 있는 이야기 수'],
+    ['x:proposal_likes', '건의에 ♥ 누르기', 'checkbox', '로그인한 사람만 · 내 건의엔 못 눌러요'],
+    ['x:proposal_likes_public', '♥ 수 모두에게 보이기', 'checkbox', '끄면 관리자만 봐요'],
+    ['x:proposal_sort', '건의함 기본 정렬', 'select', '각자 바꿀 수 있어요', [['likes', '좋아요 순'], ['new', '최신 순']]],
+    ['x:proposal_badge', '건의함 아이콘 숫자', 'select', '기다리는 건의 수', [['admin', '관리자에게만'], ['all', '모두에게'], ['off', '끄기']]],
+    ['x:proposal_withdraw', '내 건의 거둬들이기 허용', 'checkbox'],
+    ['x:proposals_close_at_deadline', '마감이 지나면 건의 닫기', 'checkbox', "'마감이 지나면 글쓰기 닫기'와 따로"],
+  ]],
+  ['넘침 막기 · 사이트 전체, 1분에', [
+    ['x:flood_lines', '새 줄', 'number', '0이면 제한 없음'],
+    ['x:flood_stories', '새 이야기 · 건의', 'number', '0이면 제한 없음'],
+    ['x:flood_guestbook', '방명록', 'number', '0이면 제한 없음'],
+  ]],
+  ['방명록 · 출석부', [
+    ['guestbook_max_chars', '방명록 글자 수', 'number'],
+    ['guestbook_cooldown_seconds', '방명록 간격 (초)', 'number'],
+    ['guestbook_open', '방명록 열림', 'checkbox'],
+    ['stats_public', '출석부 공개', 'checkbox'],
+  ]],
 ];
+const SETTINGS = SETTING_GROUPS.flatMap(([, rows]) => rows);
 
 // 부가 기능: grouped like the mockups. key 'col:x' = an existing settings column.
 const EXTRA_TABS = [
@@ -56,6 +77,8 @@ const EXTRA_TABS = [
     ['desk_patterns', '바탕 무늬 고르기', '오른쪽 클릭 메뉴 · 각자 이 기기에서'],
     ['window_shade', '창 말아 올리기', '제목 막대를 오른쪽 클릭'],
     ['tab_icon', '탭 아이콘 깜빡임', '다른 탭에 있을 때, 열어 둔 이야기에서 누가 쓰기 시작하면'],
+    ['guestbook_plane', '방명록 종이비행기', '방명록에 남긴 글이 종이비행기로 접혀 방명록 아이콘으로 날아가요'],
+    ['proposal_notice', '건의 채택 알림', '건의한 사람이 채택 뒤 처음 들어오면 한 번 알려 줘요'],
     ['memo', '메모장', '이 기기에만 저장 · 아무도 못 봐요'],
     ['first_sentence', '오늘의 첫 문장', '바탕화면 붙임쪽지'],
     ['typing_count', '누군가 쓰는 중 글자 수', '숫자만 실시간으로'],
@@ -112,6 +135,7 @@ const EXTRA_TABS = [
     ['stamp_help', '도움말에 도장 설명', ''],
     ['stamp_ink', '인주', '연달아 찍으면 도장이 옅어지고, 다시 인주를 묻혀요'],
     ['stamp_card', '도장 수첩', '내가 쓴 줄 맨 위 · 첫 줄, 꽉 채운 줄, 올빼미… 작은 업적'],
+    ['stamp_adopted', "도장 수첩: '채택' 도장", '내 건의가 서랍에 오르면'],
   ]],
   ['완결 이야기', [
     ['reading', '낭독회', '완결된 이야기에 ▶ 낭독회'],
@@ -162,7 +186,7 @@ export function adminView(app) {
   body.append(bar, scroll);
 
   const TABS = [
-    ['conflicts', '충돌'], ['stories', '이야기'], ['settings', '설정'],
+    ['conflicts', '충돌'], ['stories', '이야기'], ['proposals', '건의함'], ['settings', '설정'],
     ['guestbook', '방명록'], ['people', '참여자'], ['log', '기록'], ['extras', '부가 기능'], ['reset', '초기화'],
   ];
   let extraTab = EXTRA_TABS[0][0];
@@ -234,10 +258,15 @@ export function adminView(app) {
     const st = await A.getSettings();
     const x = { ...DEFAULTS, ...(st.extras ?? {}) };                // 'x:key' rows live in settings.extras
     const val = (k) => k.startsWith('x:') ? x[k.slice(2)] : st[k];
+    const hint = (t) => t ? h('span', { class: 'muted set-hint' }, t) : null;
+    const field = ([k, label, type, help, options]) => type === 'checkbox'
+      ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: k, checked: !!val(k) }), h('span', {}, label, help ? h('br') : null, hint(help)))
+      : type === 'select'
+        ? h('label', {}, h('span', {}, label), h('select', { class: 'field sm', name: k }, options.map(([v, t]) => h('option', { value: v, selected: val(k) === v }, t))), hint(help))
+        : h('label', {}, h('span', {}, label), h('input', { type: 'number', class: 'field sm', name: k, value: val(k), min: 0 }), hint(help));
     const form = h('form', { novalidate: true, style: 'display:flex;flex-direction:column;gap:14px' },
-      h('div', { class: 'settings-grid' }, SETTINGS.map(([k, label, type]) => type === 'checkbox'
-        ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: k, checked: !!val(k) }), label)
-        : h('label', {}, h('span', {}, label), h('input', { type: 'number', class: 'field sm', name: k, value: st[k], min: 0 })))),
+      SETTING_GROUPS.map(([title, rows]) => h('fieldset', { class: 'set-group' }, h('legend', {}, title),
+        h('div', { class: 'settings-grid' }, rows.map(field)))),
       h('p', { class: 'muted', style: 'margin:0;line-height:18px' },
         'N을 줄이면 이미 그 길이에 도달한 진행 중 이야기는 바로 완결돼요. N을 늘려도 완결된 이야기가 다시 열리지는 않아요 (이야기 창에서 하나씩 다시 열 수 있어요).'),
       h('div', { class: 'btn-row', style: 'justify-content:space-between;align-items:center' },
@@ -247,7 +276,7 @@ export function adminView(app) {
       e.preventDefault();
       const patch = {};
       for (const [k, , type] of SETTINGS) {
-        const v = type === 'checkbox' ? form[k].checked : Number(form[k].value);
+        const v = type === 'checkbox' ? form[k].checked : type === 'select' ? form[k].value : Number(form[k].value);
         if (v === val(k)) continue;
         if (k.startsWith('x:')) (patch.extras ??= {})[k.slice(2)] = v; else patch[k] = v;
       }
@@ -351,6 +380,7 @@ export function adminView(app) {
       ['client_errors', '브라우저 오류 기록 비우기', `${c.client_errors}개`, c.client_errors, false],
       ['stamps', '도장 모두 지우기', `${c.stamps}개`, c.stamps, true],
       ['guestbook', '방명록 비우기', `${c.guestbook}개 · 번호도 #001부터 다시`, c.guestbook, true],
+      ['proposals', '건의함 비우기', `건의 ${c.proposals ?? 0}개 (기다리는 것 · 채택 · 반려 기록 모두) · 그 ♥까지 · 채택된 이야기는 그대로`, c.proposals ?? 0, true],
       ['stories', '이야기 모두 지우기', `이야기 ${c.stories}편 · 줄 ${c.lines}개 (충돌 ${c.conflicts}개 포함) · 그 도장까지 · 출석부도 비어요`, c.stories, true],
       ['log', '관리 기록 비우기', `${c.log}줄 (초기화했다는 기록 한 줄은 남아요)`, c.log, false],
     ];
@@ -379,7 +409,32 @@ export function adminView(app) {
     ];
   }
 
-  const VIEWS = { reset: viewReset, extras: viewExtras, conflicts: viewConflicts, stories: viewStories, settings: viewSettings, guestbook: viewGuestbook, people: viewPeople, log: viewLog };
+  // 건의함: every proposal by status; 반려 / 거둬들인 것은 되돌릴 수 있어요; 채택은 건의함 창에서 (고치고 올리기)
+  async function viewProposals() {
+    const list = await A.listProposals();
+    if (!list.length) return h('p', { class: 'muted', style: 'margin:0' }, '아직 건의가 없어요.');
+    const LABEL = { waiting: ['sky', '기다리는 중'], adopted: ['grass', '채택'], rejected: ['stone', '반려'], withdrawn: ['stone', '거둬들임'] };
+    const groups = ['waiting', 'adopted', 'rejected', 'withdrawn'].map(st => [st, list.filter(p => p.status === st)]).filter(([, l]) => l.length);
+    return [
+      h('div', { class: 'btn-row', style: 'align-items:center' },
+        h('span', { class: 'muted' }, `기다리는 건의 ${list.filter(p => p.status === 'waiting').length}개 · 모두 ${list.length}개`),
+        h('span', { style: 'flex:1' }), btn('건의함 창 열기', () => app.go('/proposals'))),
+      ...groups.map(([st, l]) => h('section', { class: 'admin-props' },
+        h('h3', { style: 'margin:6px 0' }, `${LABEL[st][1]} ${l.length}`),
+        h('table', { class: 'table' },
+          h('thead', {}, h('tr', {}, ['제목 · 첫 줄', '건의한 사람', '♥', '언제', ''].map(t => h('th', { scope: 'col', style: 'white-space:nowrap' }, t)))),
+          h('tbody', {}, l.map(p => h('tr', {},
+            h('td', {}, h('b', {}, p.title || '(제목 없음)'), p.edited ? h('span', { class: 'muted' }, ' (다듬음)') : null, h('div', { class: 'text' }, p.text)),
+            h('td', {}, person(p.author_name, p.student_id), h('div', { class: 'muted' }, `이야기 ${p.author_stories}편`)),
+            h('td', { class: 'num' }, p.likes),
+            h('td', { class: 'muted', style: 'white-space:nowrap' }, relTime(p.decided_at ?? p.created_at)),
+            h('td', { class: 'acts' },
+              h('span', { class: `chip ${LABEL[st][0]}` }, LABEL[st][1]), ' ',
+              st === 'adopted' && p.story_id ? h('a', { class: 'btn btn-sm', href: `#/story/${p.story_id}` }, '이야기') : null,
+              st === 'rejected' || st === 'withdrawn' ? btn('되돌리기', () => act(() => A.restoreProposal(p.id), '건의함으로 되돌렸어요.')) : null)))))))];
+  }
+
+  const VIEWS = { proposals: viewProposals, reset: viewReset, extras: viewExtras, conflicts: viewConflicts, stories: viewStories, settings: viewSettings, guestbook: viewGuestbook, people: viewPeople, log: viewLog };
 
   async function render() {
     try {
@@ -408,7 +463,7 @@ export function adminView(app) {
   return {
     type: 'admin', route: '/admin', title: '관리자 콘솔', body,
     size: { w: 920, h: 620 }, minSize: { w: 640, h: 400 }, origin: { x: 60, y: 30 },
-    mount() { render(); unwatch = api.watch(['admin', 'list', 'settings', 'guestbook'], () => { if (tab !== 'settings' && tab !== 'extras' && tab !== 'reset') render(); }); },
+    mount() { render(); unwatch = api.watch(['admin', 'list', 'settings', 'guestbook', 'proposals'], () => { if (tab !== 'settings' && tab !== 'extras' && tab !== 'reset') render(); }); },
     unmount() { unwatch?.(); },
   };
 }

@@ -12,8 +12,9 @@ import { helpView } from './views/help.js';
 import { readingView } from './views/reading.js';
 import { mineView } from './views/mine.js';
 import { recapView } from './views/recap.js';
+import { proposalsView } from './views/proposals.js';
 import { initReports } from './extras/report.js';
-import { setExtras, on, bus, deadlineOver } from './extras/extras.js';
+import { setExtras, on, X, bus, deadlineOver, iga } from './extras/extras.js';
 import { initDayNight, phaseButton } from './extras/daynight.js';
 import { initDesk, deadlineEl, soundButton, memoView, aboutView } from './extras/desk.js';
 import { initCat } from './extras/cat.js';
@@ -58,6 +59,7 @@ const app = {
     wm.close('login');
     $('.bootlog')?.remove();
     renderMenubar();
+    renderNav(); loadBadge(); checkAdopted();
     forEachView(v => v.onFocus?.());
     const target = pending ?? currentRoute();
     pending = null;
@@ -75,6 +77,8 @@ const app = {
     wm.close('login');
     $('.bootlog')?.remove();
     renderMenubar();
+    renderNav(); loadBadge();
+    forEachView(v => v.onFocus?.());
     openRoute('/stories', { silent: true });
     app.go('/admin');
   },
@@ -82,6 +86,8 @@ const app = {
     app.admin = false;
     for (const k of wm.keys()) if (k === 'admin' || k.startsWith('admin-story:')) wm.close(k);
     renderMenubar();
+    renderNav(); loadBadge();
+    forEachView(v => v.onFocus?.());
   },
 };
 
@@ -94,12 +100,17 @@ function forEachView(fn) { for (const k of wm.keys()) fn(wm.get(k).view); }
 
 // ------------------------------------------------------------ routing
 
-const NAV = [
-  { route: '/stories',   label: '이야기 서랍', short: '서랍',     icon: 'folder' },
-  { route: '/new',       label: '새 이야기',   short: '새 이야기', icon: 'newdoc' },
-  { route: '/roster',    label: '출석부',      short: '출석부',   icon: 'roster' },
-  { route: '/guestbook', label: '방명록',      short: '방명록',   icon: 'book' },
-];
+// While the 건의함 is on, 새 이야기 is an admin's icon (on a phone admins start one from the 서랍 / 건의함)
+function navItems() {
+  const prop = on('proposals');
+  return [
+    { route: '/stories',   label: '이야기 서랍', short: '서랍',     icon: 'folder' },
+    !prop || app.admin ? { route: '/new', label: '새 이야기', short: '새 이야기', icon: 'newdoc', deskOnly: prop } : null,
+    prop ? { route: '/proposals', label: '건의함', short: '건의함', icon: 'suggest' } : null,
+    { route: '/roster',    label: '출석부',      short: '출석부',   icon: 'roster' },
+    { route: '/guestbook', label: '방명록',      short: '방명록',   icon: 'book' },
+  ].filter(Boolean);
+}
 
 function currentRoute() {
   try { return decodeURIComponent(location.hash.replace(/^#/, '')) || '/stories'; }
@@ -115,6 +126,7 @@ function resolve(route) {
   if (route === '/about' && on('about')) return ['about', () => aboutView(app)];
   if (route === '/mine' && on('my_lines')) return ['mine', () => mineView(app)];
   if (route === '/recap' && app.recapOpen()) return ['recap', () => recapView(app)];
+  if (route === '/proposals' && on('proposals')) return ['proposals', () => proposalsView(app)];
   const a = route.match(/^\/admin\/story\/([0-9a-f-]{36})$/i);
   if (a && app.admin) return [`admin-story:${a[1].toLowerCase()}`, () => lazyView(
     { type: 'admin-story', route, title: '관리 · 이야기', size: { w: 960, h: 600 }, minSize: { w: 720, h: 400 }, origin: { x: 120, y: 60 } },
@@ -244,6 +256,7 @@ function renderMenubar() {
     soundButton(renderMenubar),
     h('button', { type: 'button', class: 'desk-only', 'aria-pressed': String(app.crt), title: '화면 효과', onclick: () => app.setCrt(!app.crt) }, `CRT ${app.crt ? '켬' : '끔'}`),
     h('span', { class: 'desk-only clock-wrap' }, phaseButton(renderMenubar), clockEl)].flat().filter(Boolean));
+  drawFloor();
 }
 
 function logout() {
@@ -262,12 +275,70 @@ async function adminLogout() {
 }
 app.adminLogout = adminLogout;
 
+let navSig = null;
 function renderNav() {
-  iconsNav.replaceChildren(...NAV.map(n =>
-    h('a', { class: 'icon', href: `#${n.route}`, dataset: { route: n.route } }, icon(n.icon, 40), h('span', {}, n.label))));
-  dock.replaceChildren(...NAV.map(n =>
+  const items = navItems();
+  const sig = items.map(n => n.route).join();
+  if (sig === navSig) return;
+  navSig = sig;
+  const extras = [...iconsNav.querySelectorAll('.extra')];          // 결산 · 메모장 · 휴지통 (desk.js) stay
+  iconsNav.replaceChildren(...items.map(n =>
+    h('a', { class: 'icon', href: `#${n.route}`, dataset: { route: n.route } }, icon(n.icon, 40), h('span', {}, n.label))), ...extras);
+  dock.replaceChildren(...items.filter(n => !n.deskOnly).map(n =>
     h('a', { href: `#${n.route}`, dataset: { route: n.route } }, icon(n.icon, 22), h('span', {}, n.short))));
+  updateNav(wm.active?.view.route ?? null);
+  drawBadge();
 }
+
+// the number of waiting proposals on the 건의함 icon (for admins, or everyone, as the admin chose)
+let waiting = null;
+const badgeShown = () => on('proposals') && api.hasEntered()
+  && (X('proposal_badge') === 'all' || (X('proposal_badge') === 'admin' && app.admin));
+async function loadBadge() {
+  if (!badgeShown()) { waiting = null; drawBadge(); return; }
+  try { waiting = (await api.listProposals(null)).items.length; } catch { /* keep the last number */ }
+  drawBadge();
+}
+function drawBadge() {
+  for (const a of document.querySelectorAll('[data-route="/proposals"]')) {
+    a.querySelector('.nav-badge')?.remove();
+    if (waiting && badgeShown()) a.append(h('i', { class: 'nav-badge', title: `기다리는 건의 ${waiting}개` }, String(waiting)));
+  }
+}
+
+// once, the first time the proposer comes back after an admin 채택s their story
+let adoptChecked = false;
+async function checkAdopted() {
+  const ident = api.getIdentity();
+  if (adoptChecked || !ident || !on('proposals') || !on('proposal_notice')) return;
+  adoptChecked = true;
+  try {
+    const fresh = (await api.myProposals(ident)).filter(p => p.status === 'adopted' && !p.seen && p.story_id);
+    if (!fresh.length) return;
+    const p = fresh[0];
+    const close = () => note.remove();
+    const note = h('div', { class: 'adopt-note notice ok', role: 'status' },
+      h('span', {}, `건의한 「${p.title || '제목 없는 이야기'}」${fresh.length > 1 ? ` 외 ${fresh.length - 1}편이` : iga(p.title || '이야기')} 채택되어 이야기 서랍에 올라갔어요. 다른 사람들이 이어 써요. `),
+      h('a', { href: `#/story/${p.story_id}`, onclick: close }, '서랍에서 보기 ▸'),
+      h('button', { type: 'button', class: 'adopt-x', 'aria-label': '닫기', onclick: close }, '×'));
+    document.body.append(note);
+    setTimeout(close, 30000);
+    api.ackProposals(ident).catch(() => {});
+  } catch { adoptChecked = false; }
+}
+
+// phones: a slim strip under the dock (the host's badge sits on its right end); a status line on the left,
+// and the 방금 이어졌어요 ticker passes here
+const floor = h('div', { class: 'floor', 'aria-hidden': 'true' }, h('span', { class: 'floor-text' }));
+document.body.append(floor);
+let floorStories = null;
+function drawFloor() {
+  const t = floor.firstChild;
+  if (!api.hasEntered() || !floorStories) { t.textContent = '연세문학회 릴레이 소설'; return; }
+  const open = floorStories.filter(s => s.status === 'open').length;
+  t.textContent = [`진행 중 ${open}편`, `완결 ${floorStories.length - open}편`, on('presence') && presenceCount != null ? `접속 ${presenceCount}명` : null].filter(Boolean).join(' · ');
+}
+api.onStories((list) => { floorStories = list; drawFloor(); });
 
 // ------------------------------------------------------------ settings + presence
 
@@ -284,6 +355,8 @@ async function loadSettings() {
     // first visit: CRT follows the admin's default until the person picks
     if (api.prefs.get('crt') == null) { app.crt = on('crt_default'); document.body.classList.toggle('crt', app.crt); }
     renderMenubar();
+    renderNav(); loadBadge(); drawFloor();
+    if (booted) checkAdopted();
     forEachView(v => v.onSettings?.());
     // a link to a window that depends on the settings (#/recap after the deadline, #/mine, #/about…) may have
     // been opened before they arrived and fallen back to the 서랍: open what it really asked for
@@ -301,6 +374,7 @@ api.presence((n) => {
   presenceCount = n;
   presenceEl.hidden = !on('presence');
   presenceEl.textContent = `접속 중 ${n}명`;
+  drawFloor();
 });
 
 // ------------------------------------------------------------ start
@@ -322,6 +396,7 @@ const updates = initUpdateCheck();
 window.__rnCheckUpdate = () => updates?.check();    // (tests)
 bus.on('theme', () => renderMenubar());
 bus.on('sound', () => renderMenubar());          // e.g. sound turned itself off after a long time away
+api.watch(['proposals'], loadBadge);
 loadSettings();
 api.watch(['settings'], loadSettings);
 
@@ -346,3 +421,4 @@ if (!api.hasEntered()) {
   else updateNav('/stories');
 }
 booted = true;
+if (settingsSeen) checkAdopted();

@@ -34,6 +34,9 @@ export const DEFAULTS = {
   trash_toss: true, trash_phone: true,
   coffee_rings: true, cat_mischief: true, cat_gifts: true, guestbook_plane: true, stamp_ink: true,
   stamp_card: true, recap: true, deadline_fireworks: true, desk_patterns: true, window_shade: true, tab_icon: true,
+  proposals: true, proposals_per_person: 2, proposal_likes: true, proposal_likes_public: true,
+  proposal_sort: 'likes', proposal_badge: 'admin', proposal_withdraw: true, proposals_close_at_deadline: false,
+  proposal_notice: true, stamp_adopted: true, flood_lines: 300, flood_stories: 60, flood_guestbook: 60,
 };
 
 let current = { ...DEFAULTS };
@@ -70,6 +73,12 @@ export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)')
 export function yeyo(word) {
   const c = (word ?? '').codePointAt(word.length - 1) - 0xAC00;
   return c >= 0 && c < 11172 && c % 28 ? `${word}이에요` : `${word}예요`;
+}
+
+// 이/가 after a word (by its last syllable's final consonant; anything else gets 가)
+export function iga(word) {
+  const w = word ?? '', c = w.codePointAt(w.length - 1) - 0xAC00;
+  return c >= 0 && c < 11172 && c % 28 ? '이' : '가';
 }
 
 // The admin can let the deadline close writing (the server enforces it too).
