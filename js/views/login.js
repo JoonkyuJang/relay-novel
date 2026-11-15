@@ -1,7 +1,7 @@
 // 로그인: honor-system name + student number, kept on this device. Also the CRT and sound switches.
 import * as api from '../api.js';
 import { h, icon, errorText } from '../ui.js';
-import { on } from '../extras/extras.js';
+import { on, X } from '../extras/extras.js';
 import { soundOn, setSound, play } from '../extras/sound.js';
 
 export function loginView(app, { reason = '' } = {}) {
@@ -47,7 +47,9 @@ export function loginView(app, { reason = '' } = {}) {
     const st = app.settings ?? {};
     const per = st.lines_per_person_per_story ?? 1;
     introEl.textContent = `${per <= 1 ? '한 사람이 한 줄씩' : '여럿이 한 줄씩 번갈아'} 이어 써요. ${st.max_lines ?? 20}줄이 모이면 한 편이 완성돼요.`;
-    privacyEl.textContent = (st.show_student_id ?? true)
+    privacyEl.textContent = (st.show_student_id ?? true) && X('sid_mask')
+      ? '이름과 학번은 쓴 줄과 함께 저장돼요. 다른 사람에게는 이름과 학번 일부(2026••••01)만 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'
+      : (st.show_student_id ?? true)
       ? '이름과 학번은 쓴 줄과 함께 저장되고, 줄의 속성 창에서 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.'
       : '이름과 학번은 쓴 줄과 함께 저장돼요. 다른 사람에게는 이름만 보여요. 로그인은 이 기기에만 기억되고, 언제든 메뉴에서 로그아웃할 수 있어요.';
   }

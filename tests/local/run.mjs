@@ -718,5 +718,68 @@ await test('건의함: propose, ♥ (not my own), cap per person, withdraw, 채�
   await expectErr(rpc('list_proposals'), 'feature_off');
 });
 
+await test('고치기: my newest line, within the window, nobody after it; the next line is held while I edit', async () => {
+  await admin('admin_update_settings', { p: { lines_per_person_per_story: 1, extras: { self_edit: true, self_edit_minutes: 5 } } });
+  const id = (await rpc('create_story', { p_title: '고치기', p_text: '첫 줄', ...who(9700) })).story_id;
+  let b = await rpc('claim_baton', { p_story_id: id, ...who(9701) });
+  const r = await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '둘째 줄 오타', ...who(9701), p_token: b.token });
+  // write_check offers it to me, not to others
+  const wc = await rpc('write_check', { p_story_id: id, p_student_id: '2026009701' });
+  assert.equal(wc.edit.line_id, r.line_id);
+  assert.equal((await rpc('write_check', { p_story_id: id, p_student_id: '2026009702' })).edit, undefined);
+  await expectErr(rpc('begin_edit', { p_story_id: id, p_line_id: r.line_id, ...who(9702) }), 'not_your_line');
+  await expectErr(rpc('begin_edit', { p_story_id: id, p_line_id: r.line_id, ...who(9701), p_name: '딴이름' }), 'not_your_line');
+  const t0 = (await rpc('get_counters')).trash;
+  const e = await rpc('begin_edit', { p_story_id: id, p_line_id: r.line_id, ...who(9701) });
+  assert.equal(e.text, '둘째 줄 오타');
+  // others: the next line is held ("앞 줄을 고치는 중")
+  const s1 = await rpc('get_story', { p_story_id: id });
+  assert.equal(s1.editing, true); assert.equal(s1.writing, true);
+  await expectErr(rpc('claim_baton', { p_story_id: id, ...who(9702) }), 'baton_held');
+  assert.equal((await rpc('write_check', { p_story_id: id, p_student_id: '2026009702' })).detail.editing, true);
+  await expectErr(rpc('save_edit', { p_story_id: id, p_line_id: r.line_id, p_text: '가'.repeat(101), p_token: e.token, p_name: '작가9701', p_student_id: '2026009701' }), 'too_long');
+  const sv = await rpc('save_edit', { p_story_id: id, p_line_id: r.line_id, p_text: '둘째 줄', p_token: e.token, p_name: '작가9701', p_student_id: '2026009701' });
+  assert.equal(sv.changed, true);
+  const s2 = await rpc('get_story', { p_story_id: id });
+  assert.equal(s2.lines[1].text, '둘째 줄'); assert.equal(s2.lines[1].self_edited, true); assert.equal(s2.writing, false);
+  assert.equal((await su('select original_text from app.lines where id=$1', [r.line_id])).rows[0].original_text, '둘째 줄 오타');
+  assert.equal((await rpc('get_counters')).trash, t0, 'an edit hold is not 휴지통');
+  // a released edit hold isn't 휴지통 either; then someone else takes the next line → too late
+  const e2 = await rpc('begin_edit', { p_story_id: id, p_line_id: r.line_id, ...who(9701) });
+  await rpc('release_baton', { p_story_id: id, p_token: e2.token });
+  assert.equal((await rpc('get_counters')).trash, t0);
+  b = await rpc('claim_baton', { p_story_id: id, ...who(9702) });
+  assert.equal((await rpc('get_story', { p_story_id: id })).editing, false, 'an ordinary turn again');
+  assert.equal((await rpc('write_check', { p_story_id: id, p_student_id: '2026009701' })).edit, undefined);
+  const late = await expectErr(rpc('begin_edit', { p_story_id: id, p_line_id: r.line_id, ...who(9701) }), 'edit_too_late');
+  void late;
+  await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '셋째', ...who(9702), p_token: b.token });
+  await expectErr(rpc('begin_edit', { p_story_id: id, p_line_id: r.line_id, ...who(9701) }), 'edit_too_late');
+  // the window closes; the switch turns it off
+  await su(`update app.lines set created_at = now() - interval '6 minutes' where story_id = $1 and depth = 3`, [id]);
+  await expectErr(rpc('begin_edit', { p_story_id: id, p_line_id: s2.lines[1].id === r.line_id ? (await rpc('get_story', { p_story_id: id })).lines[2].id : null, ...who(9702) }), 'edit_too_late');
+  await admin('admin_update_settings', { p: { extras: { self_edit: false } } });
+  await expectErr(rpc('begin_edit', { p_story_id: id, p_line_id: r.line_id, ...who(9701) }), 'feature_off');
+  await admin('admin_update_settings', { p: { extras: { self_edit: true } } });
+  // 내가 쓴 줄 knows the story went on
+  const ml = (await rpc('my_lines', { p_student_id: '2026009701', p_name: '작가9701' })).find(x => x.line_id === r.line_id);
+  assert.equal(ml.line_count, 3); assert.equal(ml.self_edited, true);
+});
+
+await test('학번: show / masked (2026••••01) / hidden everywhere participants see it', async () => {
+  const id = (await rpc('create_story', { p_title: '학번', p_text: '하나', ...who(9800) })).story_id;
+  const sidOf = async () => (await rpc('get_story', { p_story_id: id })).lines[0].student_id;
+  await admin('admin_update_settings', { p: { show_student_id: true, extras: { sid_mask: false } } });
+  assert.equal(await sidOf(), '2026009800');
+  await admin('admin_update_settings', { p: { extras: { sid_mask: true } } });
+  assert.equal(await sidOf(), '2026••••00');
+  await rpc('post_guestbook', { p_text: '안녕', ...who(9801) });
+  assert.equal((await rpc('list_guestbook')).items[0].student_id, '2026••••01');
+  await admin('admin_update_settings', { p: { show_student_id: false } });
+  assert.equal(await sidOf(), null);
+  assert.equal((await rpc('list_guestbook')).items[0].student_id, null);
+  await admin('admin_update_settings', { p: { show_student_id: true, extras: { sid_mask: false } } });
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', SOME FAILED' : ''}`);
 await pool.end();

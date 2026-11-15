@@ -761,3 +761,35 @@ fieldset.set-group legend { padding: 0 6px; font-weight: 700; }
 @media (max-width: 359px) { .menubar .logo span { display: none; } .menubar { gap: 8px; padding: 0 8px; } }
 
 body.no-minimize .win-min { display: none; }
+
+/* 원고지 칸 on a phone: an ordinary box under a live 원고지 preview */
+.grid-box.preview { display: flex; flex-direction: column; gap: 6px; }
+.grid-box.preview .grid-cells { cursor: default; grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.grid-box.preview .grid-cells span { height: auto; aspect-ratio: 1; font-size: 15px; }
+/* 고치기 / 원고 검토 */
+.edit-own { margin-left: 8px; padding: 0 6px; border: 1px solid var(--ink); border-radius: 4px; background: var(--paper); color: var(--ink);
+  font: 11px/18px var(--ui); vertical-align: 2px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.edit-own:hover { background: var(--ink); color: var(--paper); }
+.dialog.review { width: min(480px, 100%); }
+.review-prev { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: var(--stone-bg); }
+.review-prev .text { font-size: 15px; line-height: 24px; color: var(--pencil); }
+.review-strip { grid-template-columns: repeat(auto-fill, 24px); }
+.review-strip span { height: 24px; }
+.review-hints ul { margin: 0 0 4px; padding-left: 18px; }
+@media (max-width: 767px) { .edit-own { font-size: 12px; line-height: 26px; padding: 0 8px; } }
+
+/* 사용 설명서 */
+.guide-page { text-align: left; align-items: stretch; max-width: 460px; }
+.guide-page h2, .guide-page h3, .guide-page .recap-kicker { text-align: center; }
+.guide-page > p { margin: 0; line-height: 20px; }
+.guide-mock { align-self: center; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 2px dashed var(--rule); background: var(--field); }
+.guide-mock .btn { pointer-events: none; }
+.guide-mock .text { font-family: var(--text); font-size: 15px; }
+.guide-pill { padding: 2px 8px; background: var(--ink); color: var(--cream); font-weight: 700; }
+.guide-row { display: grid; grid-template-columns: minmax(120px, 1fr) 44px auto; gap: 10px; align-items: center; }
+.guide-list li { line-height: 20px; }
+.guide-steps { list-style: decimal; padding-left: 20px; }
+.guide-count { font-variant-numeric: tabular-nums; }
+.help-guide { margin: 0 0 12px; padding: 6px 10px; background: var(--sky-bg); color: var(--sky); }
+.help-guide a { font-weight: 700; color: inherit; }
+.guide-note { background: var(--sky-bg); color: var(--sky); border-color: var(--sky); box-shadow: 3px 3px 0 var(--sky); }

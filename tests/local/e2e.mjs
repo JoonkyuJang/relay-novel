@@ -86,7 +86,7 @@ async function handle(route) {
 // ---- browser
 const browser = await chromium.launch();
 const errors = [];
-async function newUser(name, sid, { mobile = false, entered = true } = {}) {
+async function newUser(name, sid, { mobile = false, entered = true, guide = false } = {}) {
   const ctx = await browser.newContext(mobile ? { ...devices['iPhone 13'] } : { viewport: { width: 1280, height: 800 } });
   await ctx.route(`${SB}/**`, handle);
   await ctx.routeWebSocket?.(/supabase\.co/, ws => ws.close?.());
@@ -97,6 +97,8 @@ async function newUser(name, sid, { mobile = false, entered = true } = {}) {
       }
     }, [name, sid]);
   }
+  // (the 사용 설명서 offer would pop up over every first visit: only the step that tests it sees it)
+  if (!guide) await ctx.addInitScript(() => { if (!localStorage.getItem('rn.guideOffered')) localStorage.setItem('rn.guideOffered', '1'); });
   const page = await ctx.newPage();
   if (process.env.CONSOLE) page.on('console', m => { if (['error', 'warning'].includes(m.type())) console.log('    [console]', name, m.type(), m.text().slice(0, 200)); });
   page.on('pageerror', e => { errors.push(`[${name}] ${e.message}`); console.error(`[${name}] pageerror`, e.message); });
@@ -117,7 +119,8 @@ async function step(name, fn) {
 console.log('연문회 OS e2e (local)');
 await pool.query(`insert into app.admins(user_id) values ($1) on conflict do nothing`, [ADMIN]);
 // the older steps start stories as ordinary people: the 건의함 (on by default) gets its own step at the end
-await pool.query(`update app.settings set extras = extras || '{"proposals": false}'::jsonb`);
+await pool.query(`update app.settings set extras = extras || '{"proposals": false, "confirm_post": false}'::jsonb`);
+// (원고 검토 too: the older steps post with a single Enter — it gets its own step, with 고치기 and the 사용 설명서)
 
 let storyId;
 
@@ -773,7 +776,7 @@ await step('관리 · 부가 기능: inner tabs save switches and the deadline',
   await w.locator('button:has-text("저장")').click();
   await w.locator('text=설정을 저장했어요').waitFor();
   assert.equal((await pool.query(`select extras->>'title_required' v from app.settings`)).rows[0].v, 'false');
-  await pool.query(`update app.settings set extras = '{"proposals": false}'`);
+  await pool.query(`update app.settings set extras = '{"proposals": false, "confirm_post": false}'`);
 });
 
 await step('mobile: stamp sheet buttons, cat on the dock, D-n deadline', async () => {
@@ -1323,6 +1326,88 @@ await step('guest: a refresh asks again (login over the 서랍, no boot text), �
   await ad.reload();
   await win(ad, 'stories').waitFor();
   assert.equal(await ad.locator('.win[data-key="login"]').count(), 0);
+});
+
+await step('원고 검토 before posting, 고치기 within the window (the next line held meanwhile), phone 원고지 preview, 사용 설명서', async () => {
+  await pool.query(`update app.settings set lines_per_person_per_story = 1, extras = extras || '{"confirm_post": true, "self_edit": true, "self_edit_minutes": 5, "type_in_lines": false}'::jsonb`);
+  const id = await (async () => { const r = await pool.query(`select public.create_story('검토 이야기', '첫 줄이에요.', '시작', '2026310000', 'c0') r`); return r.rows[0].r.story_id; })();
+  const a = await newUser('검토자', '2026310001');
+  await a.goto(`${BASE}/#/story/${id}`);
+  const w = win(a, `story:${id}`);
+  await w.locator('button:text-is("이어 쓰기")').click();
+  const ta = w.locator('textarea');
+  await ta.fill('「그날 그날 밤이었다');
+  await ta.press('Enter');
+  const dlg = a.locator('.dialog.review');
+  await dlg.waitFor();
+  await dlg.locator('text=첫 줄이에요.').waitFor();                                   // the line before, for context
+  await dlg.locator('text=짝이 맞지 않아요').waitFor();
+  await dlg.locator('text=같은 낱말이 두 번').waitFor();
+  await a.screenshot({ path: `${SHOTS}/64-review.png` });
+  await a.keyboard.press('Escape');                                                 // back to the box, nothing posted
+  await dlg.waitFor({ state: 'detached' });
+  assert.equal((await pool.query(`select line_count from app.stories where id=$1`, [id])).rows[0].line_count, 1);
+  await ta.fill('그날 밤이었다.');
+  await ta.press('Enter');
+  await dlg.waitFor();
+  await a.waitForTimeout(450);
+  await a.keyboard.press('Enter');
+  await w.locator('.line .line-text', { hasText: '그날 밤이었다.' }).waitFor();
+  // 고치기: offered on my line; while I edit, someone else sees "앞 줄을 고치는 중"
+  const btn = w.locator('.edit-own');
+  await btn.waitFor();
+  assert.match(await btn.textContent(), /고치기 \d:\d\d/);
+  await btn.click();
+  await w.locator('text=2번째 줄 고치기').waitFor();
+  assert.equal(await w.locator('textarea').inputValue(), '그날 밤이었다.');
+  const b = await newUser('기다리는이', '2026310002');
+  await b.goto(`${BASE}/#/story/${id}`);
+  await win(b, `story:${id}`).locator('text=앞 줄을 쓴 사람이 잠깐 고치는 중이에요').waitFor();
+  await w.locator('textarea').fill('그날은 비 오는 밤이었다.');
+  await w.locator('button:text-is("고친 줄로 바꾸기")').click();
+  await a.locator('.dialog.review >> text=고친 줄 검토').waitFor();
+  await a.locator('.dialog.review button:text-is("고친 줄로 바꾸기")').click();
+  await w.locator('text=줄을 고쳤어요.').waitFor();
+  await w.locator('.line-text', { hasText: '그날은 비 오는 밤이었다.' }).locator('.edited:text-is(" (고침)")').waitFor();
+  assert.equal((await pool.query(`select original_text from app.lines where story_id=$1 and depth=2`, [id])).rows[0].original_text, '그날 밤이었다.');
+  // the next line is free again; once someone takes it, 고치기 goes away
+  await b.reload();
+  const bw = win(b, `story:${id}`);
+  await bw.locator('button:text-is("이어 쓰기")').click();
+  await bw.locator('textarea').waitFor();
+  await a.reload();
+  await w.locator('.line-text', { hasText: '그날은 비 오는 밤이었다.' }).waitFor();
+  assert.equal(await w.locator('.edit-own').count(), 0, 'no 고치기 once someone holds the next line');
+  // phone: 원고지 칸 types in an ordinary visible box under a live preview
+  const m = await newUser('폰원고지', '2026310003', { mobile: true });
+  await m.context().addInitScript(() => localStorage.setItem('rn.gridbox', '1'));
+  const id2 = (await pool.query(`select public.create_story('폰 원고지', '하나.', '시작', '2026310010', 'c1') r`)).rows[0].r.story_id;
+  await m.goto(`${BASE}/#/story/${id2}`);
+  const mw = win(m, `story:${id2}`);
+  await mw.locator('button:text-is("이어 쓰기")').tap();
+  await mw.locator('.grid-box.preview').waitFor();
+  const mta = mw.locator('.grid-box.preview textarea');
+  assert.ok(await mta.isVisible(), 'the box itself is visible on a phone');
+  await mta.fill('둘이에요');
+  await mw.locator('.grid-box.preview .grid-cells span:first-child:text-is("둘")').waitFor();      // the 원고지 fills in as you type
+  await m.screenshot({ path: `${SHOTS}/65-phone-grid-preview.png` });
+  // 사용 설명서: offered once on a first visit, opens from 도움말, pages with live numbers
+  const g = await newUser('처음', null, { entered: false, guide: true });
+  await g.goto(`${BASE}/`);
+  await g.waitForSelector('.win[data-key="login"]');
+  await g.fill('#lg-name', '처음이'); await g.fill('#lg-sid', '2026310004');
+  await g.click('text=들어가기');
+  await g.locator('.guide-note >> text=사용 설명서 보기').click();
+  const gw = win(g, 'guide');
+  await gw.locator('text=연문회 OS 사용 설명서').waitFor();
+  for (let i = 0; i < 3; i++) await gw.locator('button[aria-label="다음"]').click();
+  await gw.locator('text=원고 검토 창이 떠요').waitFor();
+  await g.screenshot({ path: `${SHOTS}/66-guide.png` });
+  await g.reload();
+  await win(g, 'stories').waitFor();
+  await g.waitForTimeout(600);
+  assert.equal(await g.locator('.guide-note').count(), 0, 'offered only once');
+  await pool.query(`update app.settings set extras = (extras - 'type_in_lines') || '{"confirm_post": false}'::jsonb`);
 });
 
 await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with edits → the proposer is told once; 내 줄 n/N', async () => {

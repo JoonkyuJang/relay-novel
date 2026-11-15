@@ -100,10 +100,13 @@ export function mineView(app) {
       }
       scroll.replaceChildren(card, mineProps, ...[...stories.values()].map(s => h('section', { class: 'mine-story' },
         h('h3', {}, h('a', { href: `#/story/${s.story_id}` }, s.title || '제목 없는 이야기'),
-          h('span', { class: `chip ${s.status === 'completed' ? 'grass' : 'sky'}` }, s.status === 'completed' ? '완결' : '진행 중')),
+          h('span', { class: `chip ${s.status === 'completed' ? 'grass' : 'sky'}` }, s.status === 'completed' ? '완결' : '진행 중'),
+          // how far the story went on after my last line in it
+          on('notify_after_me') && s.line_count > Math.max(...s.lines.map(l => l.position))
+            ? h('span', { class: 'chip stone' }, `내 줄 뒤로 ${s.line_count - Math.max(...s.lines.map(l => l.position))}줄`) : null),
         h('ol', { class: 'mine-lines' }, s.lines.sort((a, b) => a.position - b.position).map(l => h('li', {},
           h('span', { class: 'line-no' }, String(l.position).padStart(2, '0')),
-          h('span', { class: 'line-text' }, l.text),
+          h('span', { class: 'line-text' }, l.text, l.self_edited ? h('span', { class: 'edited' }, ' (고침)') : null),
           h('span', { class: 'mine-meta' },
             on('stamps') ? KINDS.filter(k => l.stamps?.[k]).map(k => h('span', { class: 'tot', role: 'img', title: NAMES[k], 'aria-label': `${NAMES[k]} ${l.stamps[k]}개` },
               stampSvg(k, { size: 16 }), h('span', { 'aria-hidden': 'true' }, l.stamps[k]))) : null,

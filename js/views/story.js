@@ -10,6 +10,8 @@ import { relayRecord, recordView, gridIcon } from '../extras/record.js';
 import { play } from '../extras/sound.js';
 import { printSheets } from '../extras/print.js';
 import { tossToBin, iDropped } from '../extras/bin.js';
+import { reviewLine } from '../extras/review.js';
+import { isPhone } from '../wm.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const STATUS_CHIP = {
@@ -17,13 +19,15 @@ const STATUS_CHIP = {
   completed: () => h('span', { class: 'chip grass' }, '완결'),
   mine: () => h('span', { class: 'chip pink' }, '내가 쓰는 중'),
   others: () => h('span', { class: 'chip pink' }, '누군가 쓰는 중'),
+  editing: () => h('span', { class: 'chip pink' }, '앞 줄 고치는 중'),
+  myEdit: () => h('span', { class: 'chip pink' }, '내 줄 고치는 중'),
 };
 
 export function storyView(app, storyId) {
   const route = `/story/${storyId}`;
   let story = null;
   let stamps = {};             // line_id -> { marks, counts, mine }
-  let baton = null;            // my claim while writing
+  let baton = null;            // my claim while writing (or my edit hold: baton.edit)
   let mode = 'idle';           // idle | writing | conflict | done
   let lastResult = null;
   let message = '';
@@ -100,7 +104,7 @@ export function storyView(app, storyId) {
   async function onPageShow(e) {
     if (!e.persisted || !baton || submitting) return;
     try {
-      const b = await api.claimBaton(storyId, app.identity());
+      const b = baton.edit ? { ...(await api.beginEdit(storyId, baton.line_id, app.identity())), edit: true } : await api.claimBaton(storyId, app.identity());
       if (closed || !baton) { api.releaseBaton(storyId, b.token).catch(() => {}); return; }
       baton = b;
       clockOffset = Date.parse(b.server_now) - Date.now();
@@ -117,9 +121,9 @@ export function storyView(app, storyId) {
 
   function renderBar() {
     const left = story.max_lines - story.line_count;
-    const chip = story.status === 'completed' ? STATUS_CHIP.completed()
-      : mode === 'writing' ? STATUS_CHIP.mine()
-      : story.writing ? STATUS_CHIP.others() : STATUS_CHIP.open();
+    const chip = story.status === 'completed' && !(mode === 'writing' && baton?.edit) ? STATUS_CHIP.completed()
+      : mode === 'writing' ? (baton?.edit ? STATUS_CHIP.myEdit() : STATUS_CHIP.mine())
+      : story.writing ? (story.editing ? STATUS_CHIP.editing() : STATUS_CHIP.others()) : STATUS_CHIP.open();
     bar.replaceChildren(...[
       chip,
       h('span', {}, `${story.line_count} / ${story.max_lines}줄`),
@@ -163,9 +167,19 @@ export function storyView(app, storyId) {
     li.append(
       h('span', { class: 'line-no' }, pad2(l.position),
         full ? h('span', { class: 'full-mark', title: `딱 ${story.max_chars}자로 꽉 채운 줄`, 'aria-label': '꽉 채웠어요' }, gridIcon(16)) : null),
-      h('span', { class: 'line-text' }, l.text, l.edited ? h('span', { class: 'edited' }, ' (수정됨)') : null),
+      h('span', { class: 'line-text' }, l.text,
+        l.edited ? h('span', { class: 'edited' }, ' (수정됨)') : l.self_edited ? h('span', { class: 'edited', title: '쓴 사람이 올린 뒤 바로 고친 줄' }, ' (고침)') : null,
+        canEdit(l) ? h('button', { type: 'button', class: 'edit-own', onclick: startEdit, title: '다음 줄이 이어지기 전, 잠깐 동안 고칠 수 있어요' },
+          '고치기 ', h('span', { 'data-edit-left': '' }, '')) : null),
       pad, who);
     return li;
+  }
+
+  // 고치기: my newest line, while its few minutes last and nobody has gone on from it
+  const editLeft = () => (blocker?.edit ? Date.parse(blocker.edit.until) - serverNow() : 0);
+  function canEdit(l) {
+    return on('self_edit') && (mode === 'idle' || mode === 'done') && !!app.identity()
+      && blocker?.edit?.line_id === l.id && editLeft() > 0;
   }
 
   function pendingText() {
@@ -175,15 +189,15 @@ export function storyView(app, storyId) {
   function renderLines() {
     // nothing visible changed (the 20 s safety refresh, a bump for someone else's baton…): keep the DOM,
     // so text selection and an open 속성 window survive
-    const sig = JSON.stringify([story.status, story.writing, mode, revealedId, othersTyping != null,
-      story.lines.map(l => [l.id, l.text, l.edited, l.removed]), stamps]);
+    const sig = JSON.stringify([story.status, story.writing, story.editing, mode, revealedId, othersTyping != null, blocker?.edit?.line_id ?? null,
+      story.lines.map(l => [l.id, l.text, l.edited, l.self_edited, l.removed]), stamps]);
     if (sig === linesSig) return;
     linesSig = sig;
     const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60;
     const first = known === null;
     const ids = new Set(story.lines.map(l => l.id));
     const items = story.lines.map(l => lineItem(l, !first && !known.has(l.id)));
-    if (story.status === 'open' && story.writing && mode !== 'writing') {
+    if (story.status === 'open' && story.writing && !story.editing && mode !== 'writing') {
       items.push(h('li', { class: 'line pending' },
         h('span', { class: 'line-no' }, pad2(story.line_count + 1)),
         h('span', { class: 'line-text' }, h('span', { 'aria-hidden': 'true' }, '▒▒▒▒▒▒ '), h('span', { 'data-typing': '' }, pendingText()), h('span', { class: 'dots', 'aria-hidden': 'true' }, '…')), h('span')));
@@ -324,12 +338,17 @@ export function storyView(app, storyId) {
   function idleFoot() {
     const ident = app.identity();
     const status = h('div', { class: 'status-line' });
-    if (story.writing) {
+    if (story.writing && story.editing) {
+      status.append(icon('hourglass', 18), h('span', {}, '앞 줄을 쓴 사람이 잠깐 고치는 중이에요'),
+        h('span', {}, ' · '), h('span', { 'data-countdown': 'story' }, ''), h('span', {}, ' 남음'));
+    } else if (story.writing) {
       status.append(icon('hourglass', 18), h('span', {}, `${story.line_count + 1}번째 줄 — 다른 사람이 쓰는 중이에요`),
         h('span', { 'data-typing-foot': '' }, othersTyping != null && on('typing_count') ? ` (${othersTyping}자)` : ''),
         h('span', {}, ' · '), h('span', { 'data-countdown': 'story' }, ''), h('span', {}, ' 남음'));
     } else if (lastResult?.result === 'accepted') {
       status.append(h('span', {}, '줄이 올라갔어요. 고마워요!'));
+    } else if (lastResult?.result === 'edited') {
+      status.append(h('span', {}, lastResult.changed ? '줄을 고쳤어요.' : '바뀐 곳이 없어서 그대로 두었어요.'));
     } else {
       const min = Math.max(1, Math.round((app.settings?.baton_seconds ?? 300) / 60));
       status.append(h('span', { class: 'muted' }, `${story.line_count + 1}번째 줄이 비어 있어요. '이어 쓰기'를 누르면 ${min}분 동안 내 자리로 맡아 둬요.`));
@@ -358,12 +377,16 @@ export function storyView(app, storyId) {
   // 원고지 writing box: a grid mirror over an invisible textarea (IME, selection, keys keep working).
   function gridBox(ta, max) {
     const cells = h('div', { class: 'grid-cells', 'aria-hidden': 'true' });
-    const box = h('div', { class: 'grid-box' }, cells, ta);
-    ta.classList.add('grid-input');
+    // phones: the hidden-field trick takes away the cursor, the selection handles and the magnifier —
+    // there you type in an ordinary box, and the 원고지 above it fills in as you go
+    const preview = isPhone();
+    const box = h('div', { class: `grid-box${preview ? ' preview' : ''}` }, cells, ta);
+    if (!preview) ta.classList.add('grid-input');
     const draw = () => {
       const chars = [...ta.value.replace(/\n/g, ' ')];
       const caret = [...ta.value.slice(0, ta.selectionStart ?? 0)].length;
-      const n = Math.max(max, chars.length + 1);
+      // (the phone preview shows just the rows in use, a row of ten at a time; the desktop box the whole sheet)
+      const n = preview ? Math.min(Math.max(max, chars.length + 1), Math.max(10, Math.ceil((chars.length + 1) / 10) * 10)) : Math.max(max, chars.length + 1);
       const focused = document.activeElement === ta;
       cells.replaceChildren(...Array.from({ length: n }, (_, i) => h('span', {
         class: `${i === caret && focused ? 'caret' : ''}${i >= max ? ' over' : ''}`, dataset: { i },
@@ -382,17 +405,18 @@ export function storyView(app, storyId) {
   }
 
   function writingFoot() {
-    const ta = h('textarea', { class: 'field', rows: 2, id: `ta-${storyId}`, value: api.getDraft(storyId), maxlength: baton.max_chars * 2, enterkeyhint: 'send', 'aria-describedby': `hint-${storyId}` });
+    const edit = !!baton.edit;
+    const ta = h('textarea', { class: 'field', rows: 2, id: `ta-${storyId}`, value: edit ? baton.text : api.getDraft(storyId), maxlength: baton.max_chars * 2, enterkeyhint: 'send',
+      spellcheck: 'true', lang: 'ko', 'aria-describedby': `hint-${storyId}` });
     const counter = h('span', { class: 'counter' });
-    const submitBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: submit }, '올리기');
+    const submitBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: submit }, baton.edit ? '고친 줄로 바꾸기' : '올리기');
     const update = () => {
       const n = api.countChars(ta.value);
       const full = n === baton.max_chars && fun('fun_full');
       counter.replaceChildren(...(full ? [gridIcon(14), ` ${n} / ${baton.max_chars}자 꽉!`] : [`${n} / ${baton.max_chars}`]));
       counter.classList.toggle('over', n > baton.max_chars);
       counter.classList.toggle('full', full);
-      api.setDraft(storyId, ta.value);
-      typing?.send(n);
+      if (!edit) { api.setDraft(storyId, ta.value); typing?.send(n); }     // (an edit keeps the story's draft, and isn't "someone typing")
     };
     ta.addEventListener('input', update);          // (the key sound is global: js/extras/sound.js)
     ta.addEventListener('keydown', (e) => {
@@ -404,18 +428,26 @@ export function storyView(app, storyId) {
     const toggleGrid = h('button', { type: 'button', class: 'btn-link', onclick: () => { gridPick = gridMode() ? '0' : '1'; api.prefs.set('gridbox', gridPick); renderFoot(); } },
       gridMode() ? '보통 칸으로' : '원고지 칸으로');
     return [
-      baton.is_final ? h('div', { class: 'notice warn', style: 'display:flex;gap:10px;align-items:center' }, icon('warn', 20),
+      baton.is_final && !edit ? h('div', { class: 'notice warn', style: 'display:flex;gap:10px;align-items:center' }, icon('warn', 20),
         h('span', {}, `이 줄이 이야기의 마지막 줄이에요. ${story.max_lines}줄의 끝을 맺어 주세요.`)) : null,
-      h('div', { class: 'status-line' }, icon('hourglass', 18), h('b', {}, `${baton.position}번째 줄`),
+      h('div', { class: 'status-line' }, icon('hourglass', 18), h('b', {}, edit ? `${baton.position}번째 줄 고치기` : `${baton.position}번째 줄`),
         h('span', { style: 'flex:1' }), h('span', {}, '남은 시간 '), h('b', { 'data-countdown': 'mine' }, '')),
       h('div', { 'data-warnings': '', role: 'status' }),
-      h('div', { class: 'label' }, h('span', { class: 'label-row' }, h('span', {}, h('label', { for: ta.id }, '내 줄'), ' ', toggleGrid),
+      h('div', { class: 'label' }, h('span', { class: 'label-row' }, h('span', {}, h('label', { for: ta.id }, edit ? '고칠 줄' : '내 줄'), ' ', toggleGrid),
         counter)),
       gridMode() ? gridBox(ta, baton.max_chars) : ta,
-      h('span', { class: 'faint compose-hint', id: `hint-${storyId}` }, 'Enter를 누르면 바로 올라가요. 올린 뒤에는 고칠 수 없어요.'),
+      h('span', { class: 'faint compose-hint', id: `hint-${storyId}` }, composeHint(edit)),
       message ? noticeBad() : null,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: cancel }, '취소'), submitBtn),
     ];
+  }
+
+  function composeHint(edit) {
+    const review = on('confirm_post') ? 'Enter를 누르면 원고 검토 창이 떠요.' : 'Enter를 누르면 바로 올라가요.';
+    if (edit) return `${review} 시간 안에 바꾸지 않으면 원래 줄 그대로예요.`;
+    return `${review} ${on('self_edit') && X('self_edit_minutes') > 0
+      ? `올린 뒤 ${X('self_edit_minutes')}분 동안은, 다음 줄이 이어지기 전까지 고칠 수 있어요.`
+      : '올린 뒤에는 고칠 수 없어요.'}`;
   }
 
   function noticeBad() {
@@ -426,7 +458,7 @@ export function storyView(app, storyId) {
   const refused = (text) => { message = text; messageNew = true; };
 
   function renderFoot() {
-    if (story.status === 'completed' && mode !== 'conflict') mode = 'done';
+    if (story.status === 'completed' && mode !== 'conflict' && !(mode === 'writing' && baton?.edit)) mode = 'done';
     const parts = mode === 'done' ? doneFoot()
       : mode === 'conflict' ? conflictFoot()
       : mode === 'writing' ? writingFoot() : idleFoot();
@@ -444,12 +476,21 @@ export function storyView(app, storyId) {
       mine.textContent = left > 0 ? fmtCountdown(left) : '만료됨';
       const warn = foot.querySelector('[data-warnings]');
       const notes = [];
-      if (left <= 0) notes.push('예약 시간이 지났어요. 그래도 올릴 수 있지만, 그 사이 다른 사람이 먼저 쓰면 충돌로 처리돼요.');
-      if (story.head_line_id !== baton.parent_id) notes.push('그 사이 이야기가 바뀌었어요. 올리면 충돌로 처리되어 관리자에게 전달돼요.');
+      if (baton.edit) { if (left <= 0) notes.push('고칠 수 있는 시간이 지났어요. 취소하면 원래 줄 그대로 남아요.'); }
+      else {
+        if (left <= 0) notes.push('예약 시간이 지났어요. 그래도 올릴 수 있지만, 그 사이 다른 사람이 먼저 쓰면 충돌로 처리돼요.');
+        if (story.head_line_id !== baton.parent_id) notes.push('그 사이 이야기가 바뀌었어요. 올리면 충돌로 처리되어 관리자에게 전달돼요.');
+      }
       if (warn && warn.dataset.sig !== notes.join('|')) {
         warn.dataset.sig = notes.join('|');
         warn.replaceChildren(...notes.map(n => h('div', { class: 'notice warn' }, n)));
       }
+    }
+    const ed = list.querySelector('[data-edit-left]');
+    if (ed) {
+      const left = editLeft();
+      if (left > 0) ed.textContent = fmtCountdown(left);
+      else { blocker = blocker ? { ...blocker, edit: null } : blocker; linesSig = null; renderLines(); }
     }
     const theirs = foot.querySelector('[data-countdown="story"]');
     if (theirs && story.baton_expires_at) {
@@ -513,7 +554,9 @@ export function storyView(app, storyId) {
       const [s] = await Promise.all([api.getStory(storyId), on('stamps')
         ? api.getStoryStamps(storyId, ident).then(x => { stamps = x; }).catch(() => {})
         : null,
-        ident && mode !== 'writing' && story?.status !== 'completed'
+        // (a finished story is checked too while its last line can still be fixed)
+        ident && mode !== 'writing' && (story?.status !== 'completed'
+          || Date.now() - Date.parse(story.completed_at) < (X('self_edit_minutes') + 1) * 60e3)
           ? api.writeCheck(storyId, ident.studentId).then(x => { blocker = x; }).catch(() => {})
           : null]);
       if (closed) return;
@@ -576,6 +619,16 @@ export function storyView(app, storyId) {
     const n = api.countChars(text);
     if (!n) { refused(errorText({ code: 'empty_text' })); renderFoot(); return; }
     if (n > baton.max_chars) { refused(errorText({ code: 'too_long', detail: { max: baton.max_chars } })); renderFoot(); return; }
+    // 원고 검토: one last look (the line before, this one on 원고지, a hint or two)
+    if (on('confirm_post')) {
+      submitting = true;
+      const before = baton.edit ? story.lines.find(l => l.position === baton.position - 1) : story.lines.at(-1);
+      const ok = await reviewLine({ text, prevText: before && !before.removed ? before.text : null, position: baton.position,
+        maxChars: baton.max_chars, isFinal: !!baton.is_final && !baton.edit, edit: !!baton.edit });
+      submitting = false;
+      if (!ok || !baton || closed) { foot.querySelector('textarea')?.focus({ preventScroll: true }); return; }
+    }
+    if (baton.edit) { await saveEdit(text); return; }
     submitting = true;
     foot.querySelectorAll('button').forEach(b => { b.disabled = true; });
     try {
@@ -604,7 +657,53 @@ export function storyView(app, storyId) {
     }
   }
 
+  async function saveEdit(text) {
+    submitting = true;
+    foot.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      const r = await api.saveEdit(storyId, baton.line_id, text, baton.token, app.identity());
+      baton = null; mode = 'idle'; message = '';
+      lastResult = { result: 'edited', changed: r.changed };
+      play(r.changed ? 'stamp' : 'select');
+      await refresh();
+      renderFoot();
+    } catch (e) {
+      refused(errorText(e));
+      if (e.code === 'edit_too_late' || e.code === 'not_your_line') { baton = null; mode = 'idle'; await refresh(); }
+      renderFoot();
+    } finally { submitting = false; }
+  }
+
+  // 고치기 → the writing box, filled with my line; the next line is held for me meanwhile
+  async function startEdit() {
+    const ident = app.identity();
+    if (!ident || claiming || !blocker?.edit) return;
+    claiming = true;
+    try {
+      const e = await api.beginEdit(storyId, blocker.edit.line_id, ident);
+      if (closed) { api.releaseBaton(storyId, e.token).catch(() => {}); return; }
+      baton = { ...e, edit: true };
+      clockOffset = Date.parse(e.server_now) - Date.now();
+      mode = 'writing'; lastResult = null; message = '';
+      play('select');
+      renderAll();
+    } catch (err) {
+      refused(errorText(err));
+      blocker = blocker ? { ...blocker, edit: null } : blocker;
+      renderAll();
+      refresh();
+    } finally { claiming = false; }
+  }
+
   async function cancel() {
+    if (baton?.edit) {                              // (letting go of an edit is no 휴지통 moment: the line stays as it was)
+      const b = baton;
+      baton = null; mode = 'idle'; lastResult = null; message = '';
+      renderAll();
+      try { await api.releaseBaton(storyId, b.token); } catch { /* expires anyway */ }
+      refresh();
+      return;
+    }
     // the writing box crumples up and lands in the 휴지통 (just a picture: the draft is kept)
     if (baton) iDropped();
     tossToBin(foot.querySelector('.grid-box') ?? foot.querySelector('textarea'), foot.querySelector('textarea')?.value ?? '');

@@ -175,6 +175,16 @@ export async function submitLine(storyId, { parentId, text, name, studentId, tok
   return r;
 }
 
+// 고치기: hold the next line and get the text back; save (or let go with releaseBaton)
+export function beginEdit(storyId, lineId, { name, studentId }) {
+  return call('begin_edit', { p_story_id: storyId, p_line_id: lineId, p_name: name, p_student_id: studentId, p_client: clientToken() });
+}
+export async function saveEdit(storyId, lineId, text, token, { name, studentId }) {
+  const r = await call('save_edit', { p_story_id: storyId, p_line_id: lineId, p_text: text, p_token: token, p_name: name, p_student_id: studentId });
+  poke([storyId, 'list']);
+  return r;
+}
+
 // 방명록 -> { total, items: [{ id, no, text, author_name, student_id, created_at }], has_more }
 export const listGuestbook = ({ before = null, limit = 30 } = {}) =>
   call('list_guestbook', { p_before: before, p_limit: limit });

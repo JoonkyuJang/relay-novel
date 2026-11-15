@@ -27,7 +27,10 @@ const SETTING_GROUPS = [
     ['submissions_open', '글쓰기 열림', 'checkbox'],
     ['allow_consecutive_lines', '같은 사람이 연달아 쓰기 허용', 'checkbox', '꺼 두면 건의한 사람(첫 줄)은 둘째 줄을 못 써요'],
     ['x:title_required', '새 이야기 제목 필수', 'checkbox', '건의에도 똑같이'],
-    ['show_student_id', '속성 창에 학번 표시', 'checkbox'],
+    ['x:confirm_post', '올리기 전 원고 검토', 'checkbox', 'Enter를 누르면 앞 줄과 함께 한 번 더 보여 줘요'],
+    ['x:self_edit', '올린 줄 잠깐 고치기', 'checkbox', '내 줄이 마지막 줄이고 아무도 다음 줄을 잡지 않았을 때만'],
+    ['x:self_edit_minutes', '… 몇 분 동안', 'number', '올린 때부터'],
+    ['sidmode', '참여자에게 학번', 'sidmode', '관리자는 늘 전부 봐요 · 속성 창 · 방명록 · 출석부 · 내보내기'],
   ]],
   ['새로운 이야기 건의함', [
     ['x:proposals', '건의함 쓰기', 'checkbox', '켜면 새 이야기는 관리자만 바로 시작하고, 다른 사람은 건의해요 · 끄면 누구나 바로 시작'],
@@ -77,6 +80,8 @@ const EXTRA_TABS = [
     ['desk_patterns', '바탕 무늬 고르기', '오른쪽 클릭 메뉴 · 각자 이 기기에서'],
     ['window_shade', '창 말아 올리기', '제목 막대를 오른쪽 클릭'],
     ['tab_icon', '탭 아이콘 깜빡임', '다른 탭에 있을 때, 열어 둔 이야기에서 누가 쓰기 시작하면'],
+    ['guide', '사용 설명서', '도움말 · 오른쪽 클릭 메뉴에서 · 처음 로그인하면 한 번 권해요'],
+    ['notify_after_me', '내 줄 뒤로 이어지면 알림', '방금 이어졌어요 막대에 · 내가 쓴 줄에 "뒤로 n줄"'],
     ['guestbook_plane', '방명록 종이비행기', '방명록에 남긴 글이 종이비행기로 접혀 방명록 아이콘으로 날아가요'],
     ['proposal_notice', '건의 채택 알림', '건의한 사람이 채택 뒤 처음 들어오면 한 번 알려 줘요'],
     ['memo', '메모장', '이 기기에만 저장 · 아무도 못 봐요'],
@@ -257,10 +262,14 @@ export function adminView(app) {
   async function viewSettings() {
     const st = await A.getSettings();
     const x = { ...DEFAULTS, ...(st.extras ?? {}) };                // 'x:key' rows live in settings.extras
-    const val = (k) => k.startsWith('x:') ? x[k.slice(2)] : st[k];
+    const val = (k) => k === 'sidmode' ? (!st.show_student_id ? 'hide' : x.sid_mask ? 'mask' : 'show')
+      : k.startsWith('x:') ? x[k.slice(2)] : st[k];
     const hint = (t) => t ? h('span', { class: 'muted set-hint' }, t) : null;
     const field = ([k, label, type, help, options]) => type === 'checkbox'
       ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: k, checked: !!val(k) }), h('span', {}, label, help ? h('br') : null, hint(help)))
+      : type === 'sidmode'
+        ? h('label', {}, h('span', {}, label), h('select', { class: 'field sm', name: k },
+            [['show', '보이기 (2026123401)'], ['mask', '가려서 (2026••••01)'], ['hide', '숨기기']].map(([v, t]) => h('option', { value: v, selected: val(k) === v }, t))), hint(help))
       : type === 'select'
         ? h('label', {}, h('span', {}, label), h('select', { class: 'field sm', name: k }, options.map(([v, t]) => h('option', { value: v, selected: val(k) === v }, t))), hint(help))
         : h('label', {}, h('span', {}, label), h('input', { type: 'number', class: 'field sm', name: k, value: val(k), min: 0 }), hint(help));
@@ -276,8 +285,9 @@ export function adminView(app) {
       e.preventDefault();
       const patch = {};
       for (const [k, , type] of SETTINGS) {
-        const v = type === 'checkbox' ? form[k].checked : type === 'select' ? form[k].value : Number(form[k].value);
+        const v = type === 'checkbox' ? form[k].checked : type === 'select' || type === 'sidmode' ? form[k].value : Number(form[k].value);
         if (v === val(k)) continue;
+        if (k === 'sidmode') { patch.show_student_id = v !== 'hide'; (patch.extras ??= {}).sid_mask = v === 'mask'; continue; }
         if (k.startsWith('x:')) (patch.extras ??= {})[k.slice(2)] = v; else patch[k] = v;
       }
       if (!Object.keys(patch).length) return notice('바뀐 게 없어요.', 'ok');

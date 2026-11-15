@@ -172,9 +172,14 @@ const MESSAGES = {
   story_not_found:     () => '이야기를 찾을 수 없어요.',
   story_closed:        () => '이미 완결된 이야기예요.',
   baton_held:          (d) => {
+    if (d?.editing) return '앞 줄을 쓴 사람이 잠깐 고치는 중이에요. 곧 이어 쓸 수 있어요.';
     const min = d?.expires_at ? Math.max(1, Math.ceil((Date.parse(d.expires_at) - Date.now()) / 60000)) : null;
     return `다른 사람이 이어 쓰는 중이에요.${min ? ` 늦어도 ${min}분 안에 자리가 나요.` : ' 잠시 후 다시 해 주세요.'}`;
   },
+  not_your_line:       () => '내가 쓴 줄만 고칠 수 있어요. 쓸 때와 같은 이름과 학번으로 로그인해 주세요.',
+  edit_too_late:       (d) => d?.why === 'continued' ? '그 사이 다음 줄이 이어져서 이제 고칠 수 없어요.'
+    : d?.why === 'held' ? '다른 사람이 다음 줄을 쓰기 시작해서 이제 고칠 수 없어요.'
+    : '고칠 수 있는 시간이 지났어요. 고칠 게 있으면 관리자에게 말해 주세요.',
   person_limit:        (d) => `이 이야기에는 한 사람당 ${d?.max}줄까지 쓸 수 있어요. 다른 이야기를 이어 써 주세요.`,
   consecutive:         () => '바로 앞 줄을 쓴 사람은 연달아 쓸 수 없어요. 다른 사람이 한 줄 이은 뒤에 다시 써 주세요.',
   invalid_parent:      () => '이야기가 바뀌었어요. 새로고침해 주세요.',

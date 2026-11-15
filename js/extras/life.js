@@ -145,9 +145,28 @@ export function initTicker() {
 
   // (completions anywhere are also announced on the bus — the last day's fireworks listen for them)
   const wanted = () => api.hasEntered() && (on('ticker') || on('deadline_fireworks'));
+  // 내 줄 뒤로: where my last line sits in each story I wrote in (from 내가 쓴 줄), so when someone
+  // writes right after it the ticker can say so
+  let myPos = null, myFor = null;
+  async function loadMine() {
+    const ident = api.getIdentity();
+    const key = ident ? `${ident.name}|${ident.studentId}` : null;
+    if (!key || !on('notify_after_me') || !on('my_lines')) { myPos = null; myFor = key; return; }
+    myFor = key;
+    try {
+      const rows = await api.myLines(ident);
+      if (myFor !== key) return;
+      myPos = new Map();
+      for (const r of rows) myPos.set(r.story_id, Math.max(myPos.get(r.story_id) ?? 0, r.position));
+    } catch { /* next time */ }
+  }
+  bus.on('my-line', () => setTimeout(loadMine, 1500));
+  bus.on('settings', () => { myFor = undefined; });
   api.onStories((list) => {
     if (!wanted()) { prev = null; return; }
     const next = new Map(list.map(s => [s.id, { line_count: s.line_count, status: s.status }]));
+    const ident = api.getIdentity();
+    if (myFor !== (ident ? `${ident.name}|${ident.studentId}` : null)) loadMine();       // (logged in / out / switches)
     if (prev) {
       for (const s of list) {
         const was = prev.get(s.id);
@@ -157,6 +176,13 @@ export function initTicker() {
         if (was && s.status === 'completed' && was.status !== 'completed') bus.emit('any-completed', { storyId: s.id });
         if (!on('ticker')) continue;
         if (!was) { if (!self) queue.push({ text: `새 이야기 · ${name}`, href }); continue; }
+        const my = myPos?.get(s.id);
+        if (my && was.line_count === my && s.line_count > my && !self && on('notify_after_me')) {
+          queue.push(s.status === 'completed' && was.status !== 'completed'
+            ? { text: `완결 · 내 줄 뒤로 이어져 ${name} ${s.line_count}줄을 다 채웠어요`, href }
+            : { text: `내 줄 뒤로 이어졌어요 · ${name} ${s.line_count}번째 줄`, href });
+          continue;
+        }
         if (s.line_count > was.line_count && !self) {
           queue.push(s.status === 'completed' && was.status !== 'completed'
             ? { text: `완결 · ${name} ${s.line_count}줄을 다 채웠어요`, href }
@@ -170,7 +196,8 @@ export function initTicker() {
     prev = next;
   });
   // keep hearing about the list even when the 서랍 is closed
-  const refresh = () => { if (wanted() && !isPhone()) api.listStories().catch(() => {}); };
+  // (phones too, now that the ticker runs along their floor strip)
+  const refresh = () => { if (wanted()) api.listStories().catch(() => {}); };
   api.watch(['list'], refresh);
   setTimeout(refresh, 1500);
 }

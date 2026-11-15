@@ -24,15 +24,18 @@ export function helpView(app) {
     const s = app.settings ?? {};
     const min = Math.round((s.baton_seconds ?? 300) / 60);
     scroll.replaceChildren(
+      on('guide') ? h('p', { class: 'help-guide' }, h('a', { href: '#/guide' }, '처음이라면 → 사용 설명서 (2분) ▸')) : null,
       h('h3', { style: 'margin:0 0 10px;font-size:13px' }, '연세문학회 릴레이 소설은 이렇게 써요'),
       h('ol', { style: 'margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;line-height:18px' },
         h('li', {}, `이야기 서랍에서 이야기를 열고 '이어 쓰기'를 누르면 ${min}분 동안 그 자리가 내 자리로 맡아져요. 그동안 다른 사람은 기다려요.`),
-        h('li', {}, 'Enter를 누르면 줄이 바로 올라가요.'),
+        h('li', {}, on('confirm_post') ? 'Enter를 누르면 원고 검토 창이 떠요. 한 번 더 보고 올려요.' : 'Enter를 누르면 줄이 바로 올라가요.'),
         h('li', {}, `한 줄은 최대 ${s.max_chars ?? 100}자, 이야기는 ${s.max_lines ?? 20}줄이 되면 자동으로 완결돼요. 마지막 줄을 쓸 땐 미리 알려 드려요.`),
         h('li', {}, perPerson(s)),
         h('li', {}, '누가 썼는지는 줄 옆 사람 모양 아이콘을 누르면 볼 수 있어요.'),
         h('li', {}, '두 사람이 같은 자리에 동시에 올리면 먼저 도착한 줄이 올라가고, 나머지는 관리자가 확인해요.'),
-        h('li', {}, '올린 줄은 직접 고칠 수 없어요. 고칠 게 있으면 관리자에게 말해 주세요.'),
+        h('li', {}, on('self_edit') && X('self_edit_minutes') > 0
+          ? `올린 뒤 ${X('self_edit_minutes')}분 동안은, 다음 줄이 이어지기 전까지 내 줄 옆의 '고치기'로 고칠 수 있어요. 그 뒤엔 관리자에게 말해 주세요.`
+          : '올린 줄은 직접 고칠 수 없어요. 고칠 게 있으면 관리자에게 말해 주세요.'),
         h('li', {}, `방명록에는 한 번에 ${s.guestbook_max_chars ?? 200}자까지, ${s.guestbook_cooldown_seconds ?? 30}초에 한 번 남길 수 있어요.`),
         on('deadline_on') && !Number.isNaN(Date.parse(X('deadline')))
           ? h('li', {}, on('deadline_closes')

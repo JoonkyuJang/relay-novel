@@ -13,6 +13,7 @@ import { readingView } from './views/reading.js';
 import { mineView } from './views/mine.js';
 import { recapView } from './views/recap.js';
 import { proposalsView } from './views/proposals.js';
+import { guideView } from './views/guide.js';
 import { initReports } from './extras/report.js';
 import { setExtras, on, X, bus, deadlineOver, iga } from './extras/extras.js';
 import { initDayNight, phaseButton } from './extras/daynight.js';
@@ -60,7 +61,7 @@ const app = {
     wm.close('login');
     $('.bootlog')?.remove();
     renderMenubar();
-    renderNav(); loadBadge(); checkAdopted();
+    renderNav(); loadBadge(); checkAdopted(); offerGuide();
     forEachView(v => v.onFocus?.());
     const target = pending ?? currentRoute();
     pending = null;
@@ -129,6 +130,7 @@ function resolve(route) {
   if (route === '/mine' && on('my_lines')) return ['mine', () => mineView(app)];
   if (route === '/recap' && app.recapOpen()) return ['recap', () => recapView(app)];
   if (route === '/proposals' && on('proposals')) return ['proposals', () => proposalsView(app)];
+  if (route === '/guide' && on('guide')) return ['guide', () => guideView(app)];
   const a = route.match(/^\/admin\/story\/([0-9a-f-]{36})$/i);
   if (a && app.admin) return [`admin-story:${a[1].toLowerCase()}`, () => lazyView(
     { type: 'admin-story', route, title: '관리 · 이야기', size: { w: 960, h: 600 }, minSize: { w: 720, h: 400 }, origin: { x: 120, y: 60 } },
@@ -335,6 +337,19 @@ async function checkAdopted() {
     setTimeout(close, 30000);
     api.ackProposals(ident).catch(() => {});
   } catch { adoptChecked = false; }
+}
+
+// the first time someone comes in (logged in or 둘러보기): the 사용 설명서 offers itself, once
+function offerGuide() {
+  if (!on('guide') || api.prefs.get('guideOffered') === '1') return;
+  api.prefs.set('guideOffered', '1');
+  const close = () => note.remove();
+  const note = h('div', { class: 'adopt-note notice guide-note', role: 'status' },
+    h('span', {}, '처음이에요? 2분이면 다 보는 사용 설명서가 있어요. '),
+    h('a', { href: '#/guide', onclick: close }, '사용 설명서 보기 ▸'),
+    h('button', { type: 'button', class: 'adopt-x', 'aria-label': '닫기', onclick: close }, '×'));
+  document.body.append(note);
+  setTimeout(close, 25000);
 }
 
 // phones: a slim strip under the dock (the host's badge sits on its right end); a status line on the left,
