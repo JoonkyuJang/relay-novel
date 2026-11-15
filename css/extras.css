@@ -70,9 +70,13 @@
 .grid-cells { display: grid; grid-template-columns: repeat(auto-fill, 26px); border-left: 1px solid #E7B9A6; border-top: 1px solid #E7B9A6; background: var(--field); cursor: text; }
 .grid-cells span { height: 26px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #E7B9A6; border-bottom: 1px solid #E7B9A6; font-family: var(--text); font-size: 16px; }
 .grid-cells span:nth-child(20n+1) { }
-.grid-cells span.caret { box-shadow: inset -3px 0 0 var(--stamp); }
+.grid-cells span.caret { box-shadow: inset 3px 0 0 var(--stamp); background: color-mix(in srgb, var(--stamp) 9%, var(--field)); animation: grid-blink 1.06s steps(1) infinite; }
+.grid-cells span.sel { background: color-mix(in srgb, var(--stamp) 26%, var(--field)); }
+.grid-cells.is-focused { outline: 2px solid color-mix(in srgb, var(--stamp) 55%, transparent); outline-offset: 1px; }
+@keyframes grid-blink { 50% { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .grid-cells span.caret { animation: none; } }
 .grid-cells span.over { background: #FBE4DE; }
-.grid-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; resize: none; }
+.grid-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; resize: none; pointer-events: none; caret-color: transparent; }
 
 /* drawer: finished cards */
 .done-card { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px dotted var(--rule); }

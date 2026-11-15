@@ -42,7 +42,9 @@ export function storyView(app, storyId) {
   let blocker = null, lastBlockerSig = 'null';          // why I can't write here (write_check), shown before pressing 이어 쓰기
   // (read when the box is drawn: the admin's default may arrive, or change, after this window opened)
   let gridPick = api.prefs.get('gridbox');
-  const gridMode = () => (gridPick == null ? !!X('grid_box_default') : gridPick === '1');
+  // (the admin can keep phones to the ordinary box: then there's no choice to make there)
+  const gridOffered = () => !isPhone() || on('grid_box_phone');
+  const gridMode = () => gridOffered() && (gridPick == null ? !!X('grid_box_default') : gridPick === '1');
   const serverNow = () => Date.now() + clockOffset;
 
   const bar = h('div', { class: 'win-bar' });
@@ -385,31 +387,126 @@ export function storyView(app, storyId) {
   }
 
   // 원고지 writing box: a grid mirror over an invisible textarea (IME, selection, keys keep working).
+  // 원고지 칸: the squares are drawn from a real (invisible) textarea that keeps the text, the caret and
+  // the IME. On a computer the box lies under the squares and lets every click through to them: a click
+  // puts the caret before that square (past the text: at its end), a drag selects, ↑ ↓ move a row and
+  // Home / End go to the row's ends, all by the squares on screen rather than the hidden box's own layout.
   function gridBox(ta, max) {
     const cells = h('div', { class: 'grid-cells', 'aria-hidden': 'true' });
     // phones: the hidden-field trick takes away the cursor, the selection handles and the magnifier —
-    // there you type in an ordinary box, and the 원고지 above it fills in as you go
+    // there you type in an ordinary box, and the 원고지 above it fills in as you go (a tap on a square
+    // still puts the caret there)
     const preview = isPhone();
     const box = h('div', { class: `grid-box${preview ? ' preview' : ''}` }, cells, ta);
     if (!preview) ta.classList.add('grid-input');
+    // squares are counted in characters, the textarea in UTF-16 units
+    const chars = () => [...ta.value.replace(/\n/g, ' ')];
+    const toOff = (i) => [...ta.value].slice(0, i).join('').length;
+    const toIdx = (off) => [...ta.value.slice(0, off)].length;
+    let queued = false;
     const draw = () => {
-      const chars = [...ta.value.replace(/\n/g, ' ')];
-      const caret = [...ta.value.slice(0, ta.selectionStart ?? 0)].length;
-      // (the phone preview shows just the rows in use, a row of ten at a time; the desktop box the whole sheet)
-      const n = preview ? Math.min(Math.max(max, chars.length + 1), Math.max(10, Math.ceil((chars.length + 1) / 10) * 10)) : Math.max(max, chars.length + 1);
+      queued = false;
+      const cs = chars();
       const focused = document.activeElement === ta;
-      cells.replaceChildren(...Array.from({ length: n }, (_, i) => h('span', {
-        class: `${i === caret && focused ? 'caret' : ''}${i >= max ? ' over' : ''}`, dataset: { i },
-      }, chars[i] ?? '')));
+      const a = toIdx(ta.selectionStart ?? 0), b = toIdx(ta.selectionEnd ?? 0);
+      const caret = ta.selectionDirection === 'backward' ? a : b;
+      // (the phone preview shows just the rows in use, a row of ten at a time; the desktop box the whole sheet)
+      const n = preview ? Math.min(Math.max(max, cs.length + 1), Math.max(10, Math.ceil((cs.length + 1) / 10) * 10)) : Math.max(max, cs.length + 1);
+      cells.classList.toggle('is-focused', focused);
+      // (the squares are kept and only what changed is touched: no flicker, and a square stays the same
+      // element while the mouse is on it)
+      while (cells.children.length > n) cells.lastChild.remove();
+      while (cells.children.length < n) cells.append(h('span', { dataset: { i: cells.children.length } }));
+      for (let i = 0; i < n; i++) {
+        const el = cells.children[i];
+        const cls = [focused && a === b && i === caret ? 'caret' : '', focused && i >= a && i < b ? 'sel' : '', i >= max ? 'over' : ''].filter(Boolean).join(' ');
+        if (el.className !== cls) el.className = cls;
+        if (el.textContent !== (cs[i] ?? '')) el.textContent = cs[i] ?? '';
+      }
     };
-    cells.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      const i = Number(e.target.dataset?.i ?? NaN);
-      ta.focus();
-      if (!Number.isNaN(i)) { const off = [...ta.value].slice(0, i).join('').length; ta.setSelectionRange(off, off); }
-      draw();
-    });
-    for (const ev of ['input', 'keyup', 'select', 'focus', 'blur', 'compositionupdate']) ta.addEventListener(ev, () => requestAnimationFrame(draw));
+    const redraw = () => { if (!queued) { queued = true; requestAnimationFrame(draw); } };
+
+    // which square a point is on: the one under it, else the nearest in that row, else the end
+    function indexAt(x, y) {
+      const spans = [...cells.children];
+      let row = null;
+      for (const el of spans) {
+        const r = el.getBoundingClientRect();
+        if (y < r.top || y >= r.bottom) continue;
+        if (x >= r.left && x < r.right) return Number(el.dataset.i);
+        row = !row || Math.abs(r.left + r.width / 2 - x) < Math.abs(row.r.left + row.r.width / 2 - x) ? { el, r } : row;
+      }
+      if (row) return Number(row.el.dataset.i);
+      const first = spans[0]?.getBoundingClientRect();
+      return first && y < first.top ? 0 : spans.length;
+    }
+    const clampIdx = (i) => Math.max(0, Math.min(i, chars().length));
+    function select(anchor, focus) {
+      const [a, b] = anchor <= focus ? [anchor, focus] : [focus, anchor];
+      ta.setSelectionRange(toOff(a), toOff(b), focus < anchor ? 'backward' : 'forward');
+      redraw();
+    }
+    function focusBox() { if (document.activeElement !== ta) ta.focus({ preventScroll: true }); }
+
+    if (preview) {
+      // (focusing in the click itself is what brings a phone's keyboard up)
+      cells.addEventListener('click', (e) => {
+        focusBox();
+        const i = clampIdx(indexAt(e.clientX, e.clientY));
+        select(i, i);
+      });
+    } else {
+      let anchor = null;
+      cells.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        focusBox();
+        const i = clampIdx(indexAt(e.clientX, e.clientY));
+        anchor = e.shiftKey ? toIdx(ta.selectionDirection === 'backward' ? ta.selectionEnd : ta.selectionStart) : i;
+        select(anchor, i);
+        cells.setPointerCapture?.(e.pointerId);
+      });
+      cells.addEventListener('pointermove', (e) => {
+        if (anchor == null || !(e.buttons & 1)) return;
+        select(anchor, clampIdx(indexAt(e.clientX, e.clientY)));
+      });
+      const end = () => { anchor = null; };
+      cells.addEventListener('pointerup', end);
+      cells.addEventListener('pointercancel', end);
+      // a double click takes the word under it
+      cells.addEventListener('dblclick', (e) => {
+        const cs = chars(), i = clampIdx(indexAt(e.clientX, e.clientY));
+        if (i >= cs.length || cs[i] === ' ') return;
+        let a = i, b = i;
+        while (a > 0 && cs[a - 1] !== ' ') a--;
+        while (b < cs.length && cs[b] !== ' ') b++;
+        select(a, b);
+      });
+      // ↑ ↓ and Home / End by the rows of squares on screen (the hidden box wraps its own way)
+      ta.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229 || e.altKey || e.metaKey || e.ctrlKey) return;
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+        const spans = [...cells.children];
+        const top0 = spans[0]?.offsetTop;
+        const cols = Math.max(1, spans.findIndex(el => el.offsetTop !== top0) === -1 ? spans.length : spans.findIndex(el => el.offsetTop !== top0));
+        const backward = ta.selectionDirection === 'backward';
+        const at = toIdx(backward ? ta.selectionStart : ta.selectionEnd);
+        const from = toIdx(backward ? ta.selectionEnd : ta.selectionStart);
+        const len = chars().length;
+        const to = e.key === 'ArrowUp' ? (at - cols < 0 ? 0 : at - cols)
+          : e.key === 'ArrowDown' ? Math.min(len, at + cols)
+          : e.key === 'Home' ? at - (at % cols)
+          : Math.min(len, at - (at % cols) + cols);
+        e.preventDefault();
+        select(e.shiftKey ? from : to, to);
+      });
+    }
+    for (const ev of ['input', 'keydown', 'keyup', 'select', 'focus', 'blur', 'compositionstart', 'compositionupdate', 'compositionend']) ta.addEventListener(ev, redraw);
+    // (a caret moved any other way — the arrow keys, the browser's own select-all — shows up right away too)
+    const onSel = () => { if (document.activeElement === ta) redraw(); };
+    document.addEventListener('selectionchange', onSel);
+    new MutationObserver((_, mo) => { if (!box.isConnected) { document.removeEventListener('selectionchange', onSel); mo.disconnect(); } })
+      .observe(foot, { childList: true });
     draw();
     return box;
   }
@@ -435,7 +532,7 @@ export function storyView(app, storyId) {
     });
     update();
     setTimeout(() => ta.focus({ preventScroll: true }));
-    const toggleGrid = h('button', { type: 'button', class: 'btn-link', onclick: () => { gridPick = gridMode() ? '0' : '1'; api.prefs.set('gridbox', gridPick); renderFoot(); } },
+    const toggleGrid = gridOffered() && h('button', { type: 'button', class: 'btn-link', onclick: () => { gridPick = gridMode() ? '0' : '1'; api.prefs.set('gridbox', gridPick); renderFoot(); } },
       gridMode() ? '보통 칸으로' : '원고지 칸으로');
     return [
       baton.is_final && !edit ? h('div', { class: 'notice warn', style: 'display:flex;gap:10px;align-items:center' }, icon('warn', 20),

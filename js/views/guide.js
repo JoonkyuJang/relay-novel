@@ -6,6 +6,7 @@ import { on, X } from '../extras/extras.js';
 import { play } from '../extras/sound.js';
 import { stampSvg, KINDS, NAMES } from '../extras/stamps.js';
 import { deadlineText } from '../extras/desk.js';
+import { isPhone } from '../wm.js';
 
 // a tiny stand-in for a piece of the real screen
 const mock = (...kids) => h('div', { class: 'guide-mock', 'aria-hidden': 'true' }, ...kids);
@@ -49,7 +50,7 @@ export function guideView(app) {
         mock(fakeBtn('이어 쓰기', true), h('span', { class: 'chip sky' }, `내 줄 0/${per}`)),
         h('ol', { class: 'recap-list guide-list guide-steps' },
           h('li', {}, `이야기를 열고 '이어 쓰기'를 누르면 ${min}분 동안 그 자리가 내 자리예요. 그동안 다른 사람은 기다려요.`),
-          h('li', {}, `한 줄은 ${C}자까지예요. '원고지 칸으로'를 누르면 원고지에 쓰듯 써져요.`),
+          h('li', {}, `한 줄은 ${C}자까지예요.${!isPhone() || on('grid_box_phone') ? " '원고지 칸으로'를 누르면 원고지에 쓰듯 써져요." : ''}`),
           h('li', {}, on('confirm_post') ? 'Enter를 누르면 원고 검토 창이 떠요. 앞 줄과 함께 한 번 더 보고 올려요.' : 'Enter를 누르면 바로 올라가요.'),
           h('li', {}, per <= 1 ? '한 이야기에는 한 줄만 쓸 수 있어요. 창 위의 "내 줄 0/1"이 알려 줘요.'
             : `한 이야기에 ${per}줄까지 쓸 수 있어요${st.allow_consecutive_lines ? '' : '. 바로 앞 줄을 쓴 사람은 연달아 쓸 수 없어요'}.`))],

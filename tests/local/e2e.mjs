@@ -1391,6 +1391,17 @@ await step('원고 검토 before posting, 고치기 within the window (the next 
   await mta.fill('둘이에요');
   await mw.locator('.grid-box.preview .grid-cells span:first-child:text-is("둘")').waitFor();      // the 원고지 fills in as you type
   await m.screenshot({ path: `${SHOTS}/65-phone-grid-preview.png` });
+  // the admin can keep phones to the ordinary box: no 원고지 칸 and no button for it there (even with it picked before)
+  await pool.query(`update app.settings set extras = extras || '{"grid_box_phone": false}'::jsonb`);
+  const id3 = (await pool.query(`select public.create_story('폰 보통 칸', '하나.', '시작', '2026310011', 'c2') r`)).rows[0].r.story_id;
+  await m.goto(`${BASE}/#/story/${id3}`);
+  await m.reload();                                                                  // (hash navigation alone keeps the old settings)
+  const mw3 = win(m, `story:${id3}`);
+  await mw3.locator('button:text-is("이어 쓰기")').tap();
+  await mw3.locator('textarea').waitFor();
+  assert.equal(await mw3.locator('.grid-box').count(), 0, 'no 원고지 칸 on a phone');
+  assert.equal(await mw3.locator('button:text-is("원고지 칸으로"), button:text-is("보통 칸으로")').count(), 0, 'and no button for it');
+  await pool.query(`update app.settings set extras = extras || '{"grid_box_phone": true}'::jsonb`);
   // 사용 설명서: offered once on a first visit, opens from 도움말, pages with live numbers
   const g = await newUser('처음', null, { entered: false, guide: true });
   await g.goto(`${BASE}/`);
@@ -1463,6 +1474,61 @@ await step('지우기: my newest line, from the line or from the 고치기 box; 
   await w.locator('.edit-own:not(.del)').waitFor();
   assert.equal(await w.locator('.edit-own.del').count(), 0);
   await pool.query(`update app.settings set extras = extras || '{"self_delete": true}'::jsonb`);
+});
+
+await step('원고지 칸 (computer): a click puts the caret on that square at once, drag selects, ↑ ↓ / Home / End by rows', async () => {
+  const id = (await pool.query(`select public.create_story('원고지 칸', '첫 줄.', '시작', '2026330000', 'c0') r`)).rows[0].r.story_id;
+  const a = await newUser('칸쓰기', '2026330001');
+  await a.context().addInitScript(() => localStorage.setItem('rn.gridbox', '1'));
+  await a.goto(`${BASE}/#/story/${id}`);
+  await a.reload();
+  const w = win(a, `story:${id}`);
+  await w.locator('button:text-is("이어 쓰기")').click();
+  const cell = (i) => w.locator(`.grid-cells span[data-i="${i}"]`);
+  await cell(0).waitFor();
+  await a.keyboard.type('가나다라 마바사');
+  const sel = () => w.locator('textarea').evaluate(t => [t.selectionStart, t.selectionEnd, t.value]);
+  await cell(8).locator('xpath=self::*[contains(@class,"caret")]').waitFor();
+  // a click on a written square: the caret goes before it, and shows there straight away
+  await cell(2).click();
+  await w.locator('.grid-cells span.caret[data-i="2"]').waitFor({ timeout: 500 });
+  assert.deepEqual((await sel()).slice(0, 2), [2, 2]);
+  await a.keyboard.type('X');
+  assert.equal((await sel())[2], '가나X다라 마바사');
+  // past the end of the text: the end
+  await cell(40).click();
+  assert.deepEqual((await sel()).slice(0, 2), [9, 9]);
+  // a drag selects; the squares show it
+  const b1 = await cell(1).boundingBox(), b4 = await cell(4).boundingBox();
+  await a.mouse.move(b1.x + 4, b1.y + b1.height / 2);
+  await a.mouse.down();
+  await a.mouse.move(b4.x + 4, b4.y + b4.height / 2, { steps: 4 });
+  await a.mouse.up();
+  assert.deepEqual((await sel()).slice(0, 2), [1, 4]);
+  assert.equal(await w.locator('.grid-cells span.sel').count(), 3);
+  // the browser's own keys are picked up at once too (shift + ← from the end)
+  await cell(40).click();
+  await a.keyboard.press('Shift+ArrowLeft');
+  await w.locator('.grid-cells span.sel[data-i="8"]').waitFor({ timeout: 500 });
+  // a double click takes the word
+  await cell(6).dblclick();
+  assert.deepEqual((await sel()).slice(0, 2), [6, 9]);
+  // rows: fill past one row, then ↑ / ↓ / Home / End go by the squares on screen
+  await cell(40).click();
+  await a.keyboard.type('아'.repeat(40));
+  const cols = await w.locator('.grid-cells').evaluate(el => { const s = [...el.children]; const t = s[0].offsetTop; const k = s.findIndex(x => x.offsetTop !== t); return k; });
+  assert.ok(cols > 3 && cols < 49, `cols ${cols}`);
+  const len = (await sel())[2].length;
+  await a.keyboard.press('ArrowUp');
+  assert.equal((await sel())[0], len - cols);
+  await a.keyboard.press('Home');
+  assert.equal((await sel())[0], (len - cols) - ((len - cols) % cols));
+  await a.keyboard.press('Shift+End');
+  const [s0, s1] = await sel();
+  assert.deepEqual([s0, s1], [(len - cols) - ((len - cols) % cols), Math.min(len, (len - cols) - ((len - cols) % cols) + cols)]);
+  await a.keyboard.press('ArrowDown');
+  await a.screenshot({ path: `${SHOTS}/68-grid-caret.png` });
+  await w.locator('button:text-is("취소")').click();
 });
 
 await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with edits → the proposer is told once; 내 줄 n/N', async () => {
