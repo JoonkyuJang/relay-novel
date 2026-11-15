@@ -72,7 +72,7 @@ export function initRings(desktop) {
   // (every new line anywhere bumps 'list': ask at most once a minute, with one catch-up call after)
   let busy = false, lastAsk = 0, again = null;
   async function refresh() {
-    if (!on('coffee_rings')) { draw(); return; }
+    if (!on('coffee_rings') || isPhone()) { draw(); return; }      // (phones don't show the rings: don't fetch them)
     const wait = 60e3 - (Date.now() - lastAsk);
     if (busy || wait > 0) { draw(); if (!again) again = setTimeout(() => { again = null; refresh(); }, Math.max(wait, 1000)); return; }
     busy = true; lastAsk = Date.now();

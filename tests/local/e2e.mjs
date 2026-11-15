@@ -1277,7 +1277,7 @@ await step('more touches: sound on the login screen, coffee rings, patterns, sha
   // (the cat may be mid-walk or napping when asked: give it a few chances)
   const mischiefDone = () => p.waitForFunction(() => document.querySelector('.paper-ball') || document.querySelector('.sticky')?.style.translate || document.querySelector('.tray-btn.batted'), null, { timeout: 8000 }).then(() => true, () => false);
   let didMischief = false;
-  for (let i = 0; i < 3 && !didMischief; i++) { await p.evaluate(() => window.__rnCat.mischief()); didMischief = await mischiefDone(); }
+  for (let i = 0; i < 3 && !didMischief; i++) { await p.evaluate((k) => window.__rnCat.mischief(k), i === 0 ? null : 'sticky'); didMischief = await mischiefDone(); }
   assert.ok(didMischief, 'the cat got up to some mischief');
   // 결산: after the deadline (an icon on the desktop, a few pages)
   await pool.query(`update app.settings set extras = extras || '{"deadline": "2026-11-01T00:00:00+09:00"}'::jsonb`);

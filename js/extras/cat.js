@@ -154,7 +154,7 @@ export function initCat(app, wm, desktop) {
   }
 
   // ---------------------------------------------------------- 장난: nudge the sticky note, knock the bin over, bat the tray
-  function mischief() {
+  function mischief(only = null) {
     const d = desktop.getBoundingClientRect();
     const trash = document.querySelector('#icons .icon.trash');
     const sticky = document.querySelector('.sticky:not([hidden])');
@@ -163,7 +163,7 @@ export function initCat(app, wm, desktop) {
       sticky && ['sticky', sticky], sticky && ['sticky', sticky],
       tray && ['tray', tray], tray && ['tray', tray],
       on('trash') && trash?.offsetParent && ['trash', trash],
-    ].filter(Boolean);
+    ].filter(Boolean).filter(([k]) => !only || k === only);       // (tests can ask for one kind)
     if (!options.length) { sit(); return; }
     const [kind, target] = options[Math.floor(Math.random() * options.length)];
     const r = (kind === 'trash' ? target.querySelector('svg') : target).getBoundingClientRect();
@@ -449,7 +449,7 @@ export function initCat(app, wm, desktop) {
     refresh() { setFrame(frameName); },
     // (for tests: make these happen now)
     gift: () => dropGift(),
-    mischief: () => mischief(),
+    mischief: (only) => mischief(only),
   };
 
   // cursor: look at it when near, stretch up when it hovers over the head
