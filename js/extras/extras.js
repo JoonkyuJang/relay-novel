@@ -37,7 +37,7 @@ export const DEFAULTS = {
   proposals: true, proposals_per_person: 2, proposal_likes: true, proposal_likes_public: true,
   proposal_sort: 'likes', proposal_badge: 'admin', proposal_withdraw: true, proposals_close_at_deadline: false,
   proposal_notice: true, stamp_adopted: true, flood_lines: 300, flood_stories: 60, flood_guestbook: 60,
-  self_edit: true, self_edit_minutes: 5, confirm_post: true, sid_mask: false, guide: true, notify_after_me: true,
+  self_edit: true, self_edit_minutes: 5, confirm_post: true, sid_mask: false, guide: true, notify_after_me: true, self_delete: true,
 };
 
 let current = { ...DEFAULTS };

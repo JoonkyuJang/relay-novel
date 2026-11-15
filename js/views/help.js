@@ -33,8 +33,8 @@ export function helpView(app) {
         h('li', {}, perPerson(s)),
         h('li', {}, '누가 썼는지는 줄 옆 사람 모양 아이콘을 누르면 볼 수 있어요.'),
         h('li', {}, '두 사람이 같은 자리에 동시에 올리면 먼저 도착한 줄이 올라가고, 나머지는 관리자가 확인해요.'),
-        h('li', {}, on('self_edit') && X('self_edit_minutes') > 0
-          ? `올린 뒤 ${X('self_edit_minutes')}분 동안은, 다음 줄이 이어지기 전까지 내 줄 옆의 '고치기'로 고칠 수 있어요. 그 뒤엔 관리자에게 말해 주세요.`
+        h('li', {}, (on('self_edit') || on('self_delete')) && X('self_edit_minutes') > 0
+          ? `올린 뒤 ${X('self_edit_minutes')}분 동안은, 다음 줄이 이어지기 전까지 내 줄 옆의 ${on('self_edit') && on('self_delete') ? "'고치기'·'지우기'로 고치거나 지울" : on('self_edit') ? "'고치기'로 고칠" : "'지우기'로 지울"} 수 있어요${on('self_delete') ? ' (첫 줄은 빼고요)' : ''}. 그 뒤엔 관리자에게 말해 주세요.`
           : '올린 줄은 직접 고칠 수 없어요. 고칠 게 있으면 관리자에게 말해 주세요.'),
         h('li', {}, `방명록에는 한 번에 ${s.guestbook_max_chars ?? 200}자까지, ${s.guestbook_cooldown_seconds ?? 30}초에 한 번 남길 수 있어요.`),
         on('deadline_on') && !Number.isNaN(Date.parse(X('deadline')))

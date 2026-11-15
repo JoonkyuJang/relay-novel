@@ -160,7 +160,8 @@ export function iDropped() {
 }
 
 // Throw the writing box `src` (holding `text`) into the bin. Returns false when there's nothing to animate.
-export function tossToBin(src, text = '') {
+// (count: false — a line its writer took back: into the bin it goes, but the 휴지통 counts only turns let go)
+export function tossToBin(src, text = '', { count: counted = true } = {}) {
   if (!on('trash') || !on('trash_toss') || reduceMotion() || !src?.isConnected) return false;
   // on a phone the keyboard (and the focused box) hides the dock and the bin: put the keyboard away first
   // (reading the layout below re-lays the page at once, so the bin and the box are where they'll be)
@@ -218,7 +219,7 @@ export function tossToBin(src, text = '') {
     ball.animate(path, { duration: ms, fill: 'forwards' }).finished.then(() => {
       // 3 · in it goes: the bin gives a little bump, the lid shuts, the count goes up
       ball.remove(); words?.remove();
-      setTrashCount(Math.max(count, before + 1));          // (the server may have counted it already)
+      if (counted) setTrashCount(Math.max(count, before + 1));          // (the server may have counted it already)
       land(bin, to);
     });
   });

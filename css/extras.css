@@ -770,6 +770,8 @@ body.no-minimize .win-min { display: none; }
 .edit-own { margin-left: 8px; padding: 0 6px; border: 1px solid var(--ink); border-radius: 4px; background: var(--paper); color: var(--ink);
   font: 11px/18px var(--ui); vertical-align: 2px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .edit-own:hover { background: var(--ink); color: var(--paper); }
+.edit-own.del { margin-left: 4px; border-color: #C23B32; color: #C23B32; }
+.edit-own.del:hover { background: #C23B32; color: #FFF9EF; }
 .dialog.review { width: min(480px, 100%); }
 .review-prev { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: var(--stone-bg); }
 .review-prev .text { font-size: 15px; line-height: 24px; color: var(--pencil); }

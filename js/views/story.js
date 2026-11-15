@@ -3,7 +3,7 @@
 // 자리 나면 알려 주기, 원고지 writing box, finished-story header / 이야기 기록, completion effects,
 // others' new lines typing themselves in, 절반 · 마지막 한 줄 milestones.
 import * as api from '../api.js';
-import { h, icon, fmtTime, fmtCountdown, errorText, attachReveal } from '../ui.js';
+import { h, icon, fmtTime, fmtCountdown, errorText, attachReveal, osConfirm } from '../ui.js';
 import { on, fun, bus, X, reduceMotion, deadlinePassed } from '../extras/extras.js';
 import { fillPad, stampButtons, updateTicks, seal } from '../extras/stamps.js';
 import { relayRecord, recordView, gridIcon } from '../extras/record.js';
@@ -104,7 +104,7 @@ export function storyView(app, storyId) {
   async function onPageShow(e) {
     if (!e.persisted || !baton || submitting) return;
     try {
-      const b = baton.edit ? { ...(await api.beginEdit(storyId, baton.line_id, app.identity())), edit: true } : await api.claimBaton(storyId, app.identity());
+      const b = baton.edit ? { ...(await api.beginEdit(storyId, baton.line_id, app.identity())), edit: true, can_delete: baton.can_delete } : await api.claimBaton(storyId, app.identity());
       if (closed || !baton) { api.releaseBaton(storyId, b.token).catch(() => {}); return; }
       baton = b;
       clockOffset = Date.parse(b.server_now) - Date.now();
@@ -169,17 +169,25 @@ export function storyView(app, storyId) {
         full ? h('span', { class: 'full-mark', title: `딱 ${story.max_chars}자로 꽉 채운 줄`, 'aria-label': '꽉 채웠어요' }, gridIcon(16)) : null),
       h('span', { class: 'line-text' }, l.text,
         l.edited ? h('span', { class: 'edited' }, ' (수정됨)') : l.self_edited ? h('span', { class: 'edited', title: '쓴 사람이 올린 뒤 바로 고친 줄' }, ' (고침)') : null,
-        canEdit(l) ? h('button', { type: 'button', class: 'edit-own', onclick: startEdit, title: '다음 줄이 이어지기 전, 잠깐 동안 고칠 수 있어요' },
-          '고치기 ', h('span', { 'data-edit-left': '' }, '')) : null),
+        ownTools(l)),
       pad, who);
     return li;
   }
 
-  // 고치기: my newest line, while its few minutes last and nobody has gone on from it
+  // 고치기 · 지우기: my newest line, while its few minutes last and nobody has gone on from it
   const editLeft = () => (blocker?.edit ? Date.parse(blocker.edit.until) - serverNow() : 0);
-  function canEdit(l) {
-    return on('self_edit') && (mode === 'idle' || mode === 'done') && !!app.identity()
-      && blocker?.edit?.line_id === l.id && editLeft() > 0;
+  const ownLine = (l) => (mode === 'idle' || mode === 'done') && !!app.identity() && blocker?.edit?.line_id === l.id && editLeft() > 0;
+  const canEdit = (l) => on('self_edit') && blocker?.edit?.can_edit !== false && ownLine(l);
+  const canDelete = (l) => on('self_delete') && !!blocker?.edit?.can_delete && ownLine(l);
+  function ownTools(l) {
+    const ed = canEdit(l), del = canDelete(l);
+    if (!ed && !del) return null;
+    const left = h('span', { 'data-edit-left': '' }, '');
+    return [
+      ed ? h('button', { type: 'button', class: 'edit-own', onclick: startEdit, title: '다음 줄이 이어지기 전, 잠깐 동안 고칠 수 있어요' }, '고치기 ', left) : null,
+      del ? h('button', { type: 'button', class: 'edit-own del', onclick: () => deleteOwn(l), title: '다음 줄이 이어지기 전, 잠깐 동안 내 줄을 거둬들일 수 있어요' },
+        '지우기', ed ? null : [' ', left]) : null,
+    ];
   }
 
   function pendingText() {
@@ -349,6 +357,8 @@ export function storyView(app, storyId) {
       status.append(h('span', {}, '줄이 올라갔어요. 고마워요!'));
     } else if (lastResult?.result === 'edited') {
       status.append(h('span', {}, lastResult.changed ? '줄을 고쳤어요.' : '바뀐 곳이 없어서 그대로 두었어요.'));
+    } else if (lastResult?.result === 'deleted') {
+      status.append(h('span', {}, `내 줄을 지웠어요. ${lastResult.position}번째 줄이 다시 비었어요.`));
     } else {
       const min = Math.max(1, Math.round((app.settings?.baton_seconds ?? 300) / 60));
       status.append(h('span', { class: 'muted' }, `${story.line_count + 1}번째 줄이 비어 있어요. '이어 쓰기'를 누르면 ${min}분 동안 내 자리로 맡아 둬요.`));
@@ -438,15 +448,21 @@ export function storyView(app, storyId) {
       gridMode() ? gridBox(ta, baton.max_chars) : ta,
       h('span', { class: 'faint compose-hint', id: `hint-${storyId}` }, composeHint(edit)),
       message ? noticeBad() : null,
-      h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: cancel }, '취소'), submitBtn),
+      h('div', { class: 'actions' },
+        edit && baton.can_delete && on('self_delete')
+          ? h('button', { type: 'button', class: 'btn danger own-delete', style: 'margin-right:auto',
+              onclick: () => deleteOwn({ id: baton.line_id, position: baton.position, text: baton.text }) }, '이 줄 지우기')
+          : null,
+        h('button', { type: 'button', class: 'btn', onclick: cancel }, '취소'), submitBtn),
     ];
   }
 
   function composeHint(edit) {
     const review = on('confirm_post') ? 'Enter를 누르면 원고 검토 창이 떠요.' : 'Enter를 누르면 바로 올라가요.';
     if (edit) return `${review} 시간 안에 바꾸지 않으면 원래 줄 그대로예요.`;
-    return `${review} ${on('self_edit') && X('self_edit_minutes') > 0
-      ? `올린 뒤 ${X('self_edit_minutes')}분 동안은, 다음 줄이 이어지기 전까지 고칠 수 있어요.`
+    const ed = on('self_edit'), del = on('self_delete');
+    return `${review} ${(ed || del) && X('self_edit_minutes') > 0
+      ? `올린 뒤 ${X('self_edit_minutes')}분 동안은, 다음 줄이 이어지기 전까지 ${ed && del ? '고치거나 지울' : ed ? '고칠' : '지울'} 수 있어요.`
       : '올린 뒤에는 고칠 수 없어요.'}`;
   }
 
@@ -682,7 +698,7 @@ export function storyView(app, storyId) {
     try {
       const e = await api.beginEdit(storyId, blocker.edit.line_id, ident);
       if (closed) { api.releaseBaton(storyId, e.token).catch(() => {}); return; }
-      baton = { ...e, edit: true };
+      baton = { ...e, edit: true, can_delete: !!blocker?.edit?.can_delete };
       clockOffset = Date.parse(e.server_now) - Date.now();
       mode = 'writing'; lastResult = null; message = '';
       play('select');
@@ -692,6 +708,37 @@ export function storyView(app, storyId) {
       blocker = blocker ? { ...blocker, edit: null } : blocker;
       renderAll();
       refresh();
+    } finally { claiming = false; }
+  }
+
+  // 지우기: take my newest line back altogether (from the line, or from the 고치기 box); the story steps
+  // back one line and the spot is free again. The line crumples into the 휴지통 (which doesn't count it).
+  async function deleteOwn(l) {
+    const ident = app.identity();
+    if (!ident || claiming || submitting) return;
+    const ok = await osConfirm(`${l.position}번째 줄을 지울까요?\n\n「${l.text}」\n\n지운 줄은 되돌릴 수 없어요. 이 자리는 다시 비어서 누구나 (나도) 이어 쓸 수 있어요.`,
+      { title: '내 줄 지우기', danger: true, ok: '지우기' });
+    if (!ok || closed) return;
+    claiming = true;
+    try {
+      await api.deleteOwnLine(storyId, l.id, ident);
+      const li = list.querySelector(`.line[data-id="${l.id}"]`);
+      if (!tossToBin(li?.querySelector('.line-text') ?? li, l.text, { count: false })) play('select');
+      baton = null; mode = 'idle'; message = '';
+      lastResult = { result: 'deleted', position: l.position };
+      blocker = blocker ? { ...blocker, edit: null } : blocker;
+      bus.emit('my-line', { storyId });
+      await refresh();
+      renderAll();
+    } catch (e) {
+      refused(errorText(e));
+      if (['edit_too_late', 'not_your_line', 'first_line', 'line_not_found'].includes(e.code)) {
+        if (baton?.edit) { const b = baton; baton = null; api.releaseBaton(storyId, b.token).catch(() => {}); }
+        mode = 'idle';
+        blocker = blocker ? { ...blocker, edit: null } : blocker;
+        await refresh();
+      }
+      renderAll();
     } finally { claiming = false; }
   }
 

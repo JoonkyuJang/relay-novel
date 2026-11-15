@@ -53,12 +53,17 @@ export function guideView(app) {
           h('li', {}, on('confirm_post') ? 'Enter를 누르면 원고 검토 창이 떠요. 앞 줄과 함께 한 번 더 보고 올려요.' : 'Enter를 누르면 바로 올라가요.'),
           h('li', {}, per <= 1 ? '한 이야기에는 한 줄만 쓸 수 있어요. 창 위의 "내 줄 0/1"이 알려 줘요.'
             : `한 이야기에 ${per}줄까지 쓸 수 있어요${st.allow_consecutive_lines ? '' : '. 바로 앞 줄을 쓴 사람은 연달아 쓸 수 없어요'}.`))],
-      on('self_edit') && editMin > 0 ? () => [h('h3', {}, '올린 줄 고치기'),
-        mock(h('span', { class: 'text' }, '내가 방금 올린 줄'), h('span', { class: 'edit-own' }, '고치기 4:12')),
-        h('ul', { class: 'recap-list guide-list' },
-          item(`${editMin}분 동안`, '방금 올린 내 줄 옆에 "고치기"가 떠요. 오타를 바로 고칠 수 있어요.'),
-          item('다음 줄이 이어지기 전까지만', '누가 다음 줄을 쓰기 시작하면 고칠 수 없어요. 고치는 동안엔 다음 줄을 잠깐 맡아 둬요.'),
-          item('(고침)', '고친 줄에는 작은 표시가 남아요.'))] : null,
+      (on('self_edit') || on('self_delete')) && editMin > 0 ? () => {
+        const ed = on('self_edit'), del = on('self_delete');
+        return [h('h3', {}, ed && del ? '올린 줄 고치기 · 지우기' : ed ? '올린 줄 고치기' : '올린 줄 지우기'),
+          mock(h('span', { class: 'text' }, '내가 방금 올린 줄'), ed ? h('span', { class: 'edit-own' }, '고치기 4:12') : null,
+            del ? h('span', { class: 'edit-own del' }, ed ? '지우기' : '지우기 4:12') : null),
+          h('ul', { class: 'recap-list guide-list' },
+            ed ? item(`${editMin}분 동안`, '방금 올린 내 줄 옆에 "고치기"가 떠요. 오타를 바로 고칠 수 있어요.') : null,
+            del ? item(ed ? '지우기' : `${editMin}분 동안`, '아예 거둬들이고 싶으면 "지우기"를 눌러요. 그 자리는 다시 비어서 누구나 (나도) 이어 써요. 첫 줄은 지울 수 없어요.') : null,
+            item('다음 줄이 이어지기 전까지만', `누가 다음 줄을 쓰기 시작하면 ${ed && del ? '고치거나 지울' : ed ? '고칠' : '지울'} 수 없어요.${ed ? ' 고치는 동안엔 다음 줄을 잠깐 맡아 둬요.' : ''}`),
+            ed ? item('(고침)', '고친 줄에는 작은 표시가 남아요.') : null)];
+      } : null,
       () => on('proposals') ? [h('h3', {}, '새 이야기는 건의함으로'),
         mock(icon('suggest', 32), h('span', { class: 'like', 'aria-pressed': 'true' }, icon('heart', 14), '3')),
         h('ul', { class: 'recap-list guide-list' },

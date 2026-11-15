@@ -1354,7 +1354,7 @@ await step('원고 검토 before posting, 고치기 within the window (the next 
   await a.keyboard.press('Enter');
   await w.locator('.line .line-text', { hasText: '그날 밤이었다.' }).waitFor();
   // 고치기: offered on my line; while I edit, someone else sees "앞 줄을 고치는 중"
-  const btn = w.locator('.edit-own');
+  const btn = w.locator('.edit-own:not(.del)');
   await btn.waitFor();
   assert.match(await btn.textContent(), /고치기 \d:\d\d/);
   await btn.click();
@@ -1408,6 +1408,61 @@ await step('원고 검토 before posting, 고치기 within the window (the next 
   await g.waitForTimeout(600);
   assert.equal(await g.locator('.guide-note').count(), 0, 'offered only once');
   await pool.query(`update app.settings set extras = (extras - 'type_in_lines') || '{"confirm_post": false}'::jsonb`);
+});
+
+await step('지우기: my newest line, from the line or from the 고치기 box; the spot is free again (and a finished story opens again)', async () => {
+  await pool.query(`update app.settings set lines_per_person_per_story = 1, extras = extras || '{"self_edit": true, "self_delete": true, "self_edit_minutes": 5, "type_in_lines": false}'::jsonb`);
+  const id = (await pool.query(`select public.create_story('지우기 이야기', '첫 줄.', '시작', '2026320000', 'c0') r`)).rows[0].r.story_id;
+  await pool.query(`update app.stories set max_lines = 2 where id = $1`, [id]);
+  const a = await newUser('지우는이', '2026320001');
+  await a.goto(`${BASE}/#/story/${id}`);
+  const w = win(a, `story:${id}`);
+  await w.locator('button:text-is("이어 쓰기")').click();
+  await w.locator('textarea').fill('잘못 쓴 끝 줄.');
+  await w.locator('textarea').press('Enter');
+  await w.locator('.line .line-text', { hasText: '잘못 쓴 끝 줄.' }).waitFor();
+  assert.equal((await pool.query(`select status from app.stories where id=$1`, [id])).rows[0].status, 'completed');
+  // no 지우기 on the first line; on mine, next to 고치기
+  const del = w.locator('.edit-own.del');
+  await del.waitFor();
+  assert.equal(await del.count(), 1);
+  assert.equal(await w.locator('.line', { hasText: '첫 줄.' }).locator('.edit-own').count(), 0);
+  await a.screenshot({ path: `${SHOTS}/67-delete-own.png` });
+  // 취소 in the dialog keeps it
+  await del.click();
+  await a.locator('.modal .dialog >> text=내 줄 지우기').waitFor();
+  await a.locator('.modal .dialog button:text-is("취소")').click();
+  assert.equal(await w.locator('.line .line-text', { hasText: '잘못 쓴 끝 줄.' }).count(), 1);
+  await del.click();
+  await a.locator('.modal .dialog button:text-is("지우기")').click();
+  await w.locator('text=내 줄을 지웠어요. 2번째 줄이 다시 비었어요.').waitFor();
+  assert.equal(await w.locator('.line .line-text', { hasText: '잘못 쓴 끝 줄.' }).count(), 0);
+  const r = (await pool.query(`select status, line_count from app.stories where id=$1`, [id])).rows[0];
+  assert.deepEqual([r.status, r.line_count], ['open', 1]);
+  assert.equal((await pool.query(`select kind from app.lines where story_id=$1 and text='잘못 쓴 끝 줄.'`, [id])).rows[0].kind, 'archived');
+  // the spot is mine to write again; this time take it back from the 고치기 box
+  await w.locator('button:text-is("이어 쓰기")').click();
+  await w.locator('textarea').fill('다시 쓴 줄.');
+  await w.locator('textarea').press('Enter');
+  await w.locator('.line .line-text', { hasText: '다시 쓴 줄.' }).waitFor();
+  await w.locator('.edit-own:not(.del)').click();
+  await w.locator('text=2번째 줄 고치기').waitFor();
+  await w.locator('button.own-delete').click();
+  await a.locator('.modal .dialog button:text-is("지우기")').click();
+  await w.locator('text=내 줄을 지웠어요. 2번째 줄이 다시 비었어요.').waitFor();
+  assert.equal(await w.locator('textarea').count(), 0, 'out of the 고치기 box');
+  const r2 = (await pool.query(`select line_count, baton_token from app.stories where id=$1`, [id])).rows[0];
+  assert.deepEqual([r2.line_count, r2.baton_token], [1, null]);
+  // switched off: no 지우기 (고치기 stays)
+  await w.locator('button:text-is("이어 쓰기")').click();
+  await w.locator('textarea').fill('세 번째 시도.');
+  await w.locator('textarea').press('Enter');
+  await w.locator('.line .line-text', { hasText: '세 번째 시도.' }).waitFor();
+  await pool.query(`update app.settings set extras = extras || '{"self_delete": false}'::jsonb`);
+  await a.reload();
+  await w.locator('.edit-own:not(.del)').waitFor();
+  assert.equal(await w.locator('.edit-own.del').count(), 0);
+  await pool.query(`update app.settings set extras = extras || '{"self_delete": true}'::jsonb`);
 });
 
 await step('건의함: propose → ♥ on a phone → admin 반려 / 채택 with edits → the proposer is told once; 내 줄 n/N', async () => {

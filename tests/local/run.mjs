@@ -766,6 +766,60 @@ await test('고치기: my newest line, within the window, nobody after it; the n
   assert.equal(ml.line_count, 3); assert.equal(ml.self_edited, true);
 });
 
+await test('지우기: my newest line, within the window, nobody after it; the story steps back (and opens again)', async () => {
+  await admin('admin_update_settings', { p: { lines_per_person_per_story: 1, allow_consecutive_lines: false, extras: { self_edit: true, self_delete: true, self_edit_minutes: 5 } } });
+  const me = i => ({ p_name: `작가${i}`, p_student_id: `2026${String(i).padStart(6, '0')}` });
+  const id = (await rpc('create_story', { p_title: '지우기', p_text: '첫 줄', ...who(9900) })).story_id;
+  await admin('admin_update_story', { p_story_id: id, p: { max_lines: 3 } });
+  const line1 = (await rpc('get_story', { p_story_id: id })).lines[0].id;
+  let b = await rpc('claim_baton', { p_story_id: id, ...who(9901) });
+  const r2 = await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '둘째', ...who(9901), p_token: b.token });
+  b = await rpc('claim_baton', { p_story_id: id, ...who(9902) });
+  const r3 = await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '셋째 (끝)', ...who(9902), p_token: b.token });
+  assert.equal((await rpc('get_story', { p_story_id: id })).status, 'completed');
+  // offered to the last line's writer (also on a finished story), not to the first line or a line already followed
+  const wc = await rpc('write_check', { p_story_id: id, p_student_id: '2026009902' });
+  assert.equal(wc.edit.line_id, r3.line_id); assert.equal(wc.edit.can_delete, true); assert.equal(wc.edit.can_edit, true);
+  await expectErr(rpc('delete_own_line', { p_story_id: id, p_line_id: r2.line_id, ...me(9901) }), 'edit_too_late');
+  await expectErr(rpc('delete_own_line', { p_story_id: id, p_line_id: line1, ...me(9900) }), 'first_line');
+  await expectErr(rpc('delete_own_line', { p_story_id: id, p_line_id: r3.line_id, ...me(9901) }), 'not_your_line');
+  await rpc('toggle_stamp', { p_line_id: r3.line_id, p_kind: 'sun', ...who(9903) });
+  const t0 = (await rpc('get_counters')).trash;
+  const d = await rpc('delete_own_line', { p_story_id: id, p_line_id: r3.line_id, ...me(9902) });
+  assert.equal(d.reopened, true); assert.equal(d.line_count, 2);
+  const s = await rpc('get_story', { p_story_id: id });
+  assert.equal(s.status, 'open'); assert.equal(s.line_count, 2); assert.equal(s.lines.length, 2); assert.equal(s.completed_at ?? null, null);
+  assert.equal((await su('select count(*)::int n from app.stamps where line_id = $1', [r3.line_id])).rows[0].n, 0, 'its stamps go');
+  assert.equal((await rpc('get_counters')).trash, t0, 'taking a line back is not 휴지통');
+  const al = (await admin('admin_get_story', { p_story_id: id })).lines.find(l => l.id === r3.line_id);
+  assert.equal(al.kind, 'archived'); assert.ok(al.self_deleted_at, 'the admin still sees it, marked');
+  // the spot is free for anyone, its writer included (the line no longer counts as theirs)
+  assert.equal((await rpc('write_check', { p_story_id: id, p_student_id: '2026009902' })).code, undefined);
+  // again, this time from the 고치기 box (my own hold doesn't stand in the way, and it goes with the line)
+  b = await rpc('claim_baton', { p_story_id: id, ...who(9902) });
+  const r3b = await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '셋째 다시', ...who(9902), p_token: b.token });
+  await rpc('begin_edit', { p_story_id: id, p_line_id: r3b.line_id, ...who(9902) });
+  await rpc('delete_own_line', { p_story_id: id, p_line_id: r3b.line_id, ...me(9902) });
+  assert.equal((await rpc('get_story', { p_story_id: id })).writing, false);
+  // someone else holding the next line → too late; the window closing → too late; the switch off → feature_off
+  await admin('admin_update_story', { p_story_id: id, p: { max_lines: 5 } });
+  b = await rpc('claim_baton', { p_story_id: id, ...who(9904) });
+  await rpc('release_baton', { p_story_id: id, p_token: b.token });
+  b = await rpc('claim_baton', { p_story_id: id, ...who(9904) });
+  const r3c = await rpc('submit_line', { p_story_id: id, p_parent_id: b.parent_id, p_text: '셋째 셋', ...who(9904), p_token: b.token });
+  b = await rpc('claim_baton', { p_story_id: id, ...who(9905) });
+  await expectErr(rpc('delete_own_line', { p_story_id: id, p_line_id: r3c.line_id, ...me(9904) }), 'edit_too_late');
+  await rpc('release_baton', { p_story_id: id, p_token: b.token });
+  await su(`update app.lines set created_at = now() - interval '6 minutes' where id = $1`, [r3c.line_id]);
+  await expectErr(rpc('delete_own_line', { p_story_id: id, p_line_id: r3c.line_id, ...me(9904) }), 'edit_too_late');
+  await su(`update app.lines set created_at = now() where id = $1`, [r3c.line_id]);
+  await admin('admin_update_settings', { p: { extras: { self_delete: false } } });
+  await expectErr(rpc('delete_own_line', { p_story_id: id, p_line_id: r3c.line_id, ...me(9904) }), 'feature_off');
+  const wc2 = await rpc('write_check', { p_story_id: id, p_student_id: '2026009904' });
+  assert.equal(wc2.edit.can_delete, false); assert.equal(wc2.edit.can_edit, true);
+  await admin('admin_update_settings', { p: { extras: { self_delete: true } } });
+});
+
 await test('학번: show / masked (2026••••01) / hidden everywhere participants see it', async () => {
   const id = (await rpc('create_story', { p_title: '학번', p_text: '하나', ...who(9800) })).story_id;
   const sidOf = async () => (await rpc('get_story', { p_story_id: id })).lines[0].student_id;

@@ -29,7 +29,8 @@ const SETTING_GROUPS = [
     ['x:title_required', '새 이야기 제목 필수', 'checkbox', '건의에도 똑같이'],
     ['x:confirm_post', '올리기 전 원고 검토', 'checkbox', 'Enter를 누르면 앞 줄과 함께 한 번 더 보여 줘요'],
     ['x:self_edit', '올린 줄 잠깐 고치기', 'checkbox', '내 줄이 마지막 줄이고 아무도 다음 줄을 잡지 않았을 때만'],
-    ['x:self_edit_minutes', '… 몇 분 동안', 'number', '올린 때부터'],
+    ['x:self_delete', '올린 줄 잠깐 지우기', 'checkbox', '고치기와 같은 조건 · 첫 줄은 못 지워요 · 지운 줄은 여기 줄 목록에 보관으로 남아요'],
+    ['x:self_edit_minutes', '… 몇 분 동안 (고치기 · 지우기)', 'number', '올린 때부터'],
     ['sidmode', '참여자에게 학번', 'sidmode', '관리자는 늘 전부 봐요 · 속성 창 · 방명록 · 출석부 · 내보내기'],
   ]],
   ['새로운 이야기 건의함', [
@@ -599,7 +600,7 @@ export function adminStoryView(app, storyId) {
       h('thead', {}, h('tr', {}, ['#', '종류', '내용', '작성자', '기기', '시각', ''].map(t => h('th', { scope: 'col' }, t)))),
       h('tbody', {}, lines.map(l => h('tr', { class: [l.kind === 'conflict' && l.conflict_status === 'open' ? 'is-conflict' : '', l.kind === 'canonical' ? 'is-canonical' : '', (l.kind === 'archived' || l.deleted_at) ? 'dim' : ''].join(' ') },
         h('td', {}, pad2(l.position), l.id === s.head_line_id ? ' ◀\uFE0E' : ''),
-        h('td', { class: 'kind' }, KIND[l.kind] ?? l.kind, l.conflict_status && l.conflict_status !== 'open' ? ` (${l.conflict_status === 'promoted' ? '승격' : '무시'})` : '', l.deleted_at ? ' [숨김]' : ''),
+        h('td', { class: 'kind' }, KIND[l.kind] ?? l.kind, l.conflict_status && l.conflict_status !== 'open' ? ` (${l.conflict_status === 'promoted' ? '승격' : '무시'})` : '', l.deleted_at ? ' [숨김]' : '', l.kind === 'archived' && l.self_deleted_at ? ' [쓴 사람이 지움]' : ''),
         h('td', {}, h('span', { class: 'text', style: 'font-size:15px;line-height:22px' }, l.text), l.original_text ? h('div', { class: 'muted' }, `원래: ${l.original_text}`) : null),
         h('td', {}, person(l.author_name, l.student_id)),
         h('td', { class: 'muted' }, short(l.client_token)),
