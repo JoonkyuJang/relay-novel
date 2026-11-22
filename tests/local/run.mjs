@@ -53,6 +53,24 @@ async function test(name, fn) {
 console.log('relay-novel local tests');
 await su(`insert into app.admins(user_id) values ($1)`, [ADMIN]);
 
+// Supabase runs API requests with pg-safeupdate: a DELETE / UPDATE without WHERE fails there, even
+// inside a function (it doesn't locally). So no function body may have one.
+await test('no bare DELETE / UPDATE in any function (pg-safeupdate on Supabase)', async () => {
+  const fns = (await su(`select n.nspname || '.' || p.proname as name, p.prosrc as src from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                         where n.nspname in ('app', 'public') and p.prolang = (select oid from pg_language where lanname = 'plpgsql')
+                            or n.nspname in ('app', 'public') and p.prolang = (select oid from pg_language where lanname = 'sql')`)).rows;
+  const bad = [];
+  for (const { name, src } of fns) {
+    const body = src.replace(/--[^\n]*/g, '');
+    for (const m of body.matchAll(/\b(delete\s+from|update)\s+[\w.]+\b[\s\S]*?;/gi)) {
+      if (/^update/i.test(m[0]) && !/\bset\b/i.test(m[0])) continue;
+      if (/\bdo\s+$/i.test(body.slice(Math.max(0, m.index - 6), m.index))) continue;     // (insert … on conflict do update: not an UPDATE)
+      if (!/\bwhere\b/i.test(m[0])) bad.push(`${name}: ${m[0].replace(/\s+/g, ' ').slice(0, 80)}`);
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+
 await test('anon cannot touch private tables or helpers', async () => {
   const c = await pool.connect();
   try {

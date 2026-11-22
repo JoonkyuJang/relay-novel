@@ -3,6 +3,9 @@ import * as api from '../api.js';
 import { h, fmtTime, relTime, errorText, osConfirm, osPrompt } from '../ui.js';
 import { DEFAULTS, on } from '../extras/extras.js';
 
+// (admins also get the database's own words when something unexpected goes wrong)
+const errText = (e) => errorText(e) + (e?.code === 'unknown' && e.detail?.message ? ` (${e.detail.code}: ${e.detail.message})` : '');
+
 const A = api.admin;
 const short = (s, n = 8) => (s ? String(s).slice(0, n) : '');
 const person = (name, sid) => `${name ?? ''} (${sid ?? ''})`;
@@ -206,7 +209,7 @@ export function adminView(app) {
 
   async function act(fn, ok) {
     try { await fn(); notice(ok ?? null, 'ok'); }
-    catch (e) { notice(errorText(e)); }
+    catch (e) { notice(errText(e)); }
     await render();
   }
 
@@ -356,7 +359,7 @@ export function adminView(app) {
         onclick: () => { extraTab = name; render(); } }, name)));
     const save = async (patch, label) => {
       try { await A.updateSettings(patch); notice(`${label} 저장했어요.`, 'ok'); }
-      catch (e) { notice(errorText(e)); }
+      catch (e) { notice(errText(e)); }
     };
     const rows = EXTRA_TABS.find(t => t[0] === extraTab)[1].map(([key, label, hint, type]) => {
       const col = key.startsWith('col:') ? key.slice(4) : null;
@@ -456,7 +459,7 @@ export function adminView(app) {
       pane.replaceChildren(...[content].flat().filter(Boolean));
     } catch (e) {
       renderTabs();
-      pane.replaceChildren(h('div', { class: 'notice bad' }, errorText(e)));
+      pane.replaceChildren(h('div', { class: 'notice bad' }, errText(e)));
       if (e.code === 'not_admin' || e.code === 'permission_denied') app.adminLost?.();
     }
   }
@@ -469,7 +472,7 @@ export function adminView(app) {
       document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       notice('백업 파일을 내려받았어요.', 'ok');
-    } catch (e) { notice(errorText(e)); }
+    } catch (e) { notice(errText(e)); }
   }
 
   return {
@@ -501,7 +504,7 @@ export function adminStoryView(app, storyId) {
 
   async function act(fn, ok) {
     try { await fn(); notice(ok ?? null, 'ok'); }
-    catch (e) { notice(errorText(e)); }
+    catch (e) { notice(errText(e)); }
     await render();
   }
 
@@ -519,7 +522,7 @@ export function adminStoryView(app, storyId) {
   async function render() {
     let s;
     try { s = await A.getStory(storyId); }
-    catch (e) { notice(errorText(e)); return; }
+    catch (e) { notice(errText(e)); return; }
     view.setTitle?.(`관리 · ${s.title || '제목 없는 이야기'}`);
     const byId = new Map(s.lines.map(l => [l.id, l]));
     const lines = [...s.lines].sort((a, b) => a.position - b.position ||
@@ -568,7 +571,7 @@ export function adminStoryView(app, storyId) {
             const NAME = { sun: '참 잘했어요', laugh: '재밌어요', cur: '다음이 궁금해요' };
             await osConfirm(list.length ? list.map(x => `${NAME[x.kind]} — ${person(x.name, x.student_id)} · ${fmtTime(x.created_at)}`).join('\n') : '아직 찍힌 도장이 없어요.',
               { title: `${pad2(l.position)}번 줄 도장`, cancel: '닫기', ok: '확인' });
-          } catch (e) { notice(errorText(e)); }
+          } catch (e) { notice(errText(e)); }
         }) : null,
       ].filter(Boolean);
       if (l.kind === 'canonical' && l.id !== s.head_line_id) {
